@@ -646,6 +646,7 @@ function pingwatch() {
       if (v === null || v === undefined) return '–';
       const n = Number(v);
       if (!isFinite(n)) return '–';
+      if (n >= 1000) return n.toFixed(0);
       return n.toFixed(1);
     },
 

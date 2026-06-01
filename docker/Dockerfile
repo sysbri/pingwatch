@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-        iw iproute2 mtr-tiny traceroute ca-certificates tzdata zip tini curl \
+        iw iproute2 mtr-tiny traceroute iperf3 ca-certificates tzdata zip tini curl \
  && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system --gid 10001 pingwatch \

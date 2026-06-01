@@ -64,19 +64,37 @@ async def run(conn: ConnDep) -> dict[str, Any]:
     if cur is not None and not cur.done():
         return {"task_id": _current_task["task_id"], "status": "running", "eta_s": 20}
 
-    # Budget guard: refuse if today's byte count + worst-case test would
-    # exceed the configured daily cap.
-    used = await queries.bytes_today(conn)
-    cap_bytes = (await _cap_mb(conn)) * 1024 * 1024
-    if used + _BUDGET_GUARD_BYTES > cap_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "daily_cap_exceeded",
-                "bytes_today": used,
-                "cap_bytes": cap_bytes,
-            },
-        )
+    # Load provider + iperf3 settings
+    provider_raw = await queries.get_setting(conn, "speedtest.provider")
+    provider = (provider_raw or "cloudflare").strip().lower()
+    if provider not in {"cloudflare", "speedtest_net", "iperf3"}:
+        provider = "cloudflare"
+    iperf3_server = await queries.get_setting(conn, "speedtest.iperf3_server")
+    iperf3_port_raw = await queries.get_setting(conn, "speedtest.iperf3_port")
+    try:
+        iperf3_port = int(iperf3_port_raw) if iperf3_port_raw else 5201
+    except (TypeError, ValueError):
+        iperf3_port = 5201
+    settings_payload: dict[str, Any] = {
+        "speedtest.provider": provider,
+        "speedtest.iperf3_server": iperf3_server or "",
+        "speedtest.iperf3_port": iperf3_port,
+    }
+
+    # Budget guard: only for Internet-providers (cloudflare / speedtest_net).
+    # iperf3 is LAN -> kein Internet-Volumen.
+    if provider in {"cloudflare", "speedtest_net"}:
+        used = await queries.bytes_today(conn)
+        cap_bytes = (await _cap_mb(conn)) * 1024 * 1024
+        if used + _BUDGET_GUARD_BYTES > cap_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "daily_cap_exceeded",
+                    "bytes_today": used,
+                    "cap_bytes": cap_bytes,
+                },
+            )
 
     # Lazy import: another agent owns the worker module.
     try:
@@ -88,10 +106,11 @@ async def run(conn: ConnDep) -> dict[str, Any]:
         ) from exc
 
     task_id = secrets.token_hex(8)
-    task = asyncio.create_task(run_speedtest(conn, task_id))
+    task = asyncio.create_task(run_speedtest(conn, task_id, settings_payload))
     _current_task["task_id"] = task_id
     _current_task["task"] = task
-    return {"task_id": task_id, "status": "running", "eta_s": 20}
+    eta = 5 if provider == "iperf3" else 20
+    return {"task_id": task_id, "status": "running", "eta_s": eta, "provider": provider}
 
 
 @router.get("/status")

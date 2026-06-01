@@ -55,3 +55,33 @@
   </div>
   <input type="number" class="set-inp" x-model.number="settings['heartbeat.miss_threshold_ms']">
 </div>
+
+<h3 style="margin-top:22px">Speedtest</h3>
+<p class="pw-sec-hint">Manueller Speedtest per Knopfdruck auf dem Dashboard. Waehle den Provider passend zu deiner Anschluss-Situation.</p>
+
+<div class="set-row">
+  <div class="lbl">Provider
+    <small>
+      <b>Cloudflare:</b> Speedtest.com-aehnlich, ~30 MB pro Test, ~25s.<br>
+      <b>speedtest.net:</b> Ookla-Server (nahester Standort), ~30 MB, ~30s.<br>
+      <b>iperf3:</b> LAN-Test gegen eigenen Server (z.B. NAS), kein Internet-Volumen, ~10s. Server-Host und Port unten konfigurieren.
+    </small>
+  </div>
+  <select class="set-inp" x-model="settings['speedtest.provider']">
+    <option value="cloudflare">Cloudflare</option>
+    <option value="speedtest_net">speedtest.net (Ookla)</option>
+    <option value="iperf3">iperf3 (LAN)</option>
+  </select>
+</div>
+<div class="set-row" x-show="settings['speedtest.provider'] === 'iperf3'" x-cloak>
+  <div class="lbl">iperf3 Server-Host
+    <small>Hostname oder IP des iperf3-Servers im LAN (z.B. NAS, anderer Pi). Leer = Test schlaegt fehl.</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['speedtest.iperf3_server']" placeholder="z.B. 192.168.1.10 oder nas.local">
+</div>
+<div class="set-row" x-show="settings['speedtest.provider'] === 'iperf3'" x-cloak>
+  <div class="lbl">iperf3 Server-Port
+    <small>TCP-Port des iperf3-Servers. Standard ist 5201.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['speedtest.iperf3_port']">
+</div>

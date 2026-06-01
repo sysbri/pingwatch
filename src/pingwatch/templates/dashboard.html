@@ -54,7 +54,7 @@
       <div class="row"><span class="lbl">Up</span><span class="val"><span x-text="fmtMbps(speedtest.last && speedtest.last.up_mbps)"></span> Mbps</span></div>
       <div class="row"><span class="lbl">Latenz</span><span class="val"><span x-text="fmtMbps(speedtest.last && speedtest.last.latency_ms)"></span> ms</span></div>
       <div class="row meta">
-        <span x-text="(speedtest.last && speedtest.last.server) || 'speed.cloudflare.com'"></span>
+        <span x-text="(() => { const s = (speedtest.last && speedtest.last.server) || 'speed.cloudflare.com'; return s.length > 40 ? s.slice(0, 37) + '...' : s; })()"></span>
         <span x-text="speedtest.last && speedtest.last.ts_ms ? fmtAgo(speedtest.last.ts_ms) : ''"></span>
       </div>
     </div>
