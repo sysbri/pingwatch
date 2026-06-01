@@ -164,6 +164,22 @@ if [ -f "${DEPLOY_DIR}/pingwatch-host-helper.service" ]; then
   systemctl enable --now pingwatch-host-helper.service
 fi
 
+# ---- 9b. Shared dir for host-helper result JSON files (wifi-*.json) ----
+install -d -m 0755 /run/pingwatch-shared
+# Re-create on every boot via tmpfiles.d (since /run is tmpfs)
+install -m 0644 /dev/stdin /etc/tmpfiles.d/pingwatch.conf <<'TMPFILES'
+d /run/pingwatch-shared 0755 root root -
+TMPFILES
+
+# ---- 9c. Source watcher (auto-reload kiosk on file changes) ----
+if [ -f "${DEPLOY_DIR}/pingwatch-source-watcher.service" ]; then
+  apt-get install -y --no-install-recommends inotify-tools
+  install -m 0755 "${DEPLOY_DIR}/pingwatch-source-watcher.sh" /usr/local/bin/pingwatch-source-watcher.sh
+  install -m 0644 "${DEPLOY_DIR}/pingwatch-source-watcher.service" /etc/systemd/system/pingwatch-source-watcher.service
+  systemctl daemon-reload
+  systemctl enable --now pingwatch-source-watcher.service
+fi
+
 # ---- 10. Compose system unit ----
 install -m 0644 "${DEPLOY_DIR}/pingwatch.service" /etc/systemd/system/pingwatch.service
 systemctl daemon-reload

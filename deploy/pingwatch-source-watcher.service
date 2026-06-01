@@ -1,0 +1,15 @@
+[Unit]
+Description=PingWatch source watcher (reloads kiosk Chromium when static/templates change)
+After=pingwatch.service pingwatch-kiosk.service
+Wants=pingwatch.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pingwatch-source-watcher.sh
+Restart=always
+RestartSec=5
+# Needs root to clear chromium cache + sudo -u pingwatch
+User=root
+
+[Install]
+WantedBy=multi-user.target
