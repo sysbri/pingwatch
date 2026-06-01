@@ -1,0 +1,42 @@
+{# Detail screen — destination header + 4 tabs. #}
+
+<div class="det-head" :class="{ ok: detail.status === 'ok' }">
+  <div class="left">
+    <div class="back" @click="goto('dashboard')">←</div>
+    <div class="title-block">
+      <div class="crumb">Dashboard · <span x-text="detail.name || 'Detail'"></span></div>
+      <div class="title">
+        <span x-text="detail.name || '—'"></span>
+        <span class="badge" :class="{ ok: detail.status === 'ok' }" x-text="detail.statusLabel || ''"></span>
+      </div>
+      <div class="sub" x-text="detail.address || ''"></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn" @click="exportDetail('csv')">CSV exportieren</button>
+    <button class="btn primary" @click="triggerTrace()">Traceroute jetzt</button>
+  </div>
+</div>
+
+<div class="det-tabs">
+  <div class="tab" :class="{ active: detail.tab === 'uebersicht' }" @click="switchTab('uebersicht')" data-tab="uebersicht">Übersicht</div>
+  <div class="tab" :class="{ active: detail.tab === 'aussetzer' }" @click="switchTab('aussetzer')" data-tab="aussetzer">
+    Aussetzer
+    <span class="ct" x-text="(detail.outages && detail.outages.length) || 0" x-show="detail.outages && detail.outages.length"></span>
+  </div>
+  <div class="tab" :class="{ active: detail.tab === 'trace' }" @click="switchTab('trace')" data-tab="trace">Traceroute-Verlauf</div>
+  <div class="tab" :class="{ active: detail.tab === 'roh' }" @click="switchTab('roh')" data-tab="roh">Roh-Pings</div>
+</div>
+
+<div class="det-tab-content" :class="{ active: detail.tab === 'uebersicht' }" data-tab-content="uebersicht">
+  {% include "detail/uebersicht.html" %}
+</div>
+<div class="det-tab-content" :class="{ active: detail.tab === 'aussetzer' }" data-tab-content="aussetzer">
+  {% include "detail/aussetzer.html" %}
+</div>
+<div class="det-tab-content" :class="{ active: detail.tab === 'trace' }" data-tab-content="trace">
+  {% include "detail/trace.html" %}
+</div>
+<div class="det-tab-content" :class="{ active: detail.tab === 'roh' }" data-tab-content="roh">
+  {% include "detail/roh.html" %}
+</div>

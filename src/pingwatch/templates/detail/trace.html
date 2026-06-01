@@ -1,0 +1,63 @@
+{# Traceroute-Verlauf tab — list of snapshots + selected hop sparklines. #}
+
+<div class="filter-bar">
+  <span class="lbl">Filter</span>
+  <button class="chip" :class="{ active: detail.tracesChangedOnly }" @click="detail.tracesChangedOnly = !detail.tracesChangedOnly; loadTraces()">nur Routen-Wechsel</button>
+  <div class="spacer"></div>
+  <span class="ct-pill"><b x-text="(detail.traces && detail.traces.length) || 0"></b> Snapshots</span>
+</div>
+
+<div class="ot-main">
+  <div class="ot-list">
+    <div class="ph"><span class="pt">Snapshots</span><span>letzte 30 Tage</span></div>
+    <div style="overflow:auto;flex:1">
+      <template x-for="t in (detail.traces || [])" :key="t.id">
+        <div class="ot-row" :class="{ selected: detail.selectedTraceId === t.id }" @click="selectTrace(t.id)">
+          <div class="t" x-text="formatTime(t.ts_ms)"><small x-text="formatDate(t.ts_ms)"></small></div>
+          <div class="info">
+            <div class="desc">
+              <span class="tag" :class="t.route_changed ? 'multi' : ''" x-text="t.route_changed ? 'CHANGED' : 'stable'"></span>
+              <span x-text="t.hop_count + ' Hops · ' + t.trigger"></span>
+            </div>
+            <div class="meta pw-mono" x-text="(t.signature_hash || '').slice(0,8)"></div>
+          </div>
+          <div class="dur" x-text="t.success ? 'OK' : 'FAIL'"></div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="ot-detail">
+    <template x-if="detail.hopTrends && detail.hopTrends.hops && detail.hopTrends.hops.length">
+      <div>
+        <div class="ot-det-h">
+          <div class="ttl">Hop-Trends <small>letzte 200 Snapshots</small></div>
+        </div>
+        <div class="tr-hops">
+          <template x-for="h in detail.hopTrends.hops" :key="h.hop_no">
+            <div class="tr-hop" :class="h.is_suspect ? 'suspect' : ''">
+              <div class="n" x-text="h.hop_no"></div>
+              <div class="h">
+                <span x-text="h.host || h.ip || '*'"></span>
+                <small x-text="h.ip || ''"></small>
+              </div>
+              <div class="rtt" x-text="formatLatency(h.rtt_us) + ' ms'"></div>
+              {# FIX 6: render real sparkline bars instead of "N pts" text. #}
+              <div class="ls">
+                <span class="pw-spark" style="height:22px;gap:1px;display:inline-flex;align-items:flex-end;width:60px">
+                  <template x-for="(v, i) in (h.sparkline_rtt_us || [])" :key="i">
+                    <span :style="{ height: sparkBarHeight(v, h.sparkline_rtt_us), background:'#3b82f6', flex:'1', borderRadius:'1px' }"></span>
+                  </template>
+                </span>
+              </div>
+              <div class="dt" x-text="h.is_suspect ? '!' : ''"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+    <template x-if="!detail.hopTrends || !(detail.hopTrends.hops && detail.hopTrends.hops.length)">
+      <div style="color:#6b7280;font-size:13px;text-align:center;padding:40px 0">noch keine Traces</div>
+    </template>
+  </div>
+</div>

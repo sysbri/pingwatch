@@ -1,0 +1,3 @@
+#!/bin/sh
+# udev handler: unmount the USB pseudo-fixed mount; ignore missing.
+umount /media/pingwatch-usb 2>/dev/null || true

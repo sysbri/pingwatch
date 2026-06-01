@@ -1,0 +1,16 @@
+[Unit]
+Description=PingWatch compose stack
+Requires=docker.service pingwatch-host-helper.service
+After=docker.service network-online.target pingwatch-host-helper.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/pingwatch
+ExecStart=/usr/bin/docker compose -f /opt/pingwatch/docker/docker-compose.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f /opt/pingwatch/docker/docker-compose.yml down
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

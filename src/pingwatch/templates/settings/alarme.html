@@ -1,0 +1,56 @@
+<h3>Aussetzer-Erkennung</h3>
+<p class="pw-sec-hint">Wann zaehlt ein Ping als verloren, ein Latenz-Ausreisser als Spike, ein Ziel als instabil ("FLAKY"). Defaults sind konservativ und seit Wochen produktiv.</p>
+
+<div class="set-row">
+  <div class="lbl">N konsekutive Losses (Start)
+    <small>So viele Pings hintereinander muessen verloren gehen damit ein Outage beginnt. Schuetzt vor false positives durch einzelne Glitches.</small>
+  </div>
+  <input type="number" class="set-inp" min="1" max="10" x-model.number="settings['outage.N_consec_loss']">
+</div>
+<div class="set-row">
+  <div class="lbl">K konsekutive OKs (Ende)
+    <small>So viele Pings hintereinander muessen wieder ankommen damit der Outage als beendet gilt. Verhindert Flapping bei wackliger Verbindung.</small>
+  </div>
+  <input type="number" class="set-inp" min="1" max="10" x-model.number="settings['outage.K_consec_ok']">
+</div>
+<div class="set-row">
+  <div class="lbl">Spike-Threshold (ms)
+    <small>Ein Ping gilt als "Spike" wenn die RTT diesen Wert ueberschreitet. Default 80 ms.</small>
+  </div>
+  {# FIX 4: Backend speichert µs, UI zeigt ms — beim Eingeben/Speichern umrechnen.
+     Verwendet @change statt @input damit Alpine den Wert nach reaktiven Updates
+     wieder neu rendert; ||80000 Fallback verhindert leeres Feld vor loadSettings(). #}
+  <input type="number" min="1" step="1" class="set-inp"
+         :value="((settings['spike.absolute_threshold_us'] || 80000) / 1000)"
+         @change="settings['spike.absolute_threshold_us'] = Math.max(1, parseInt($event.target.value) || 80) * 1000">
+</div>
+<div class="set-row">
+  <div class="lbl">Spike p50-Multiplikator
+    <small>ALTERNATIV &mdash; Spike wenn RTT &gt; p50 * Multiplikator. Der hoehere der zwei Werte gewinnt. Verhindert dass auf einer schon-langsamen Strecke kein Spike mehr triggert.</small>
+  </div>
+  <input type="number" step="0.1" class="set-inp" x-model.number="settings['spike.p50_multiplier']">
+</div>
+<div class="set-row">
+  <div class="lbl">MULTI-Fenster (ms)
+    <small>Wenn mehrere Ziele innerhalb dieses Fensters ausfallen, wird das als ein "MULTI"-Outage gruppiert statt N Einzel-Outages.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['multi.window_ms']">
+</div>
+<div class="set-row">
+  <div class="lbl">FLAKY-Threshold (%)
+    <small>Ein Ziel wird als "FLAKY" markiert wenn loss &gt; X % ueber 24 h. Beeinflusst nur die Anzeige (Badge), nicht die Outage-Erkennung.</small>
+  </div>
+  <input type="number" step="0.1" class="set-inp" x-model.number="settings['flaky.loss_threshold_pct']">
+</div>
+<div class="set-row">
+  <div class="lbl">Toast bei Outage
+    <small>Kurz-Benachrichtigung rechts oben sobald ein Outage detected wurde.</small>
+  </div>
+  <input type="checkbox" x-model="settings['ui.toast_on_outage']">
+</div>
+<div class="set-row">
+  <div class="lbl">Beep bei Outage
+    <small>Akustisches Signal via Browser-Audio-API (nur wenn der Browser Audio darf).</small>
+  </div>
+  <input type="checkbox" x-model="settings['ui.beep_on_outage']">
+</div>

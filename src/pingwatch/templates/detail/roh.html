@@ -1,0 +1,43 @@
+{# Roh-Pings tab — full log with filters and live tail. #}
+
+<div class="filter-bar">
+  <span class="lbl">Status</span>
+  <button class="chip" :class="{ active: detail.pingStatuses.includes('ok') }" @click="togglePingStatus('ok')">OK</button>
+  <button class="chip" :class="{ active: detail.pingStatuses.includes('spike') }" @click="togglePingStatus('spike')">Spike</button>
+  <button class="chip" :class="{ active: detail.pingStatuses.includes('loss') }" @click="togglePingStatus('loss')">Loss</button>
+  <input class="search" type="search" placeholder="Suche…" x-model="detail.pingSearch" @input="loadRawPings()">
+  <div class="spacer"></div>
+  <span class="ct-pill"><b x-text="(detail.rawPings && detail.rawPings.length) || 0"></b> Treffer</span>
+</div>
+
+{# FIX 6: use the proper 7-column .rp-table layout (header + scrollable body)
+   instead of bare ping-stream lines. The CSS for .rp-table/.rp-th/.rp-tr
+   already exists in pingwatch.css. #}
+<div class="rp-table">
+  <div class="rp-th">
+    <div>TIME</div><div>SEQ</div><div>LAT</div><div>FLAG</div>
+    <div>ERROR</div><div>NOTE</div><div>TRACE</div>
+  </div>
+  <div class="rp-tb" style="overflow:auto">
+    <template x-for="p in (detail.rawPings || [])" :key="p.id">
+      <div class="rp-tr"
+           :class="!p.success ? 'fail' : ((p.flags & 1) ? 'warn' : 'ok')">
+        <div class="t" x-text="formatTime(p.ts_ms)"></div>
+        <div x-text="p.sequence ?? '-'"></div>
+        <div class="lat" x-text="p.success ? (formatLatency(p.latency_us) + ' ms') : '—'"></div>
+        <div x-text="(p.flags & 1) ? 'SPIKE' : (p.success ? '' : 'FAIL')"></div>
+        <div x-text="p.error_kind || ''"></div>
+        <div class="note" x-text="p.note || ''"></div>
+        <div class="src">
+          <template x-if="p.has_trace">
+            <a :href="'#trace/' + (p.sequence || '')" style="color:#60a5fa;text-decoration:none">→</a>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+  <div class="rp-foot">
+    <span><b x-text="(detail.rawPings || []).length"></b> Pings</span>
+    <span class="live-tag" style="font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(16,185,129,0.15);color:#34d399;font-weight:600">LIVE</span>
+  </div>
+</div>

@@ -1,0 +1,99 @@
+{# Übersicht tab — KPI strip + latency chart + percentiles/histogram. #}
+<div class="kpi-strip">
+  <div class="kpi"><div class="l">Latenz Ø</div><div class="v" x-text="formatLatency(detail.overview && detail.overview.kpi && detail.overview.kpi.mean_us)"><small> ms</small></div></div>
+  <div class="kpi"><div class="l">Loss</div><div class="v" :class="(detail.overview && detail.overview.kpi && detail.overview.kpi.loss_pct > 1) ? 'amber' : 'green'" x-text="formatLossPct(detail.overview && detail.overview.kpi && detail.overview.kpi.loss_pct)"><small> %</small></div></div>
+  <div class="kpi"><div class="l">p50</div><div class="v" x-text="formatLatency(detail.overview && detail.overview.percentiles && detail.overview.percentiles.p50)"><small> ms</small></div></div>
+  <div class="kpi"><div class="l">p95</div><div class="v" x-text="formatLatency(detail.overview && detail.overview.percentiles && detail.overview.percentiles.p95)"><small> ms</small></div></div>
+  <div class="kpi"><div class="l">p99</div><div class="v amber" x-text="formatLatency(detail.overview && detail.overview.percentiles && detail.overview.percentiles.p99)"><small> ms</small></div></div>
+  <div class="kpi"><div class="l">min</div><div class="v" x-text="formatLatency(detail.overview && detail.overview.kpi && detail.overview.kpi.min_us)"><small> ms</small></div></div>
+  <div class="kpi"><div class="l">max</div><div class="v red" x-text="formatLatency(detail.overview && detail.overview.kpi && detail.overview.kpi.max_us)"><small> ms</small></div></div>
+  <div class="kpi"><div class="l">Pings</div><div class="v" x-text="formatNumber(detail.overview && detail.overview.kpi && detail.overview.kpi.total)"></div></div>
+</div>
+
+<div class="det-main">
+  <div class="chart-panel">
+    <div class="chart-head">
+      <div class="pt">Latenz · 24 h</div>
+      <div class="range">
+        <button :class="{ active: detail.range === '1h' }" @click="setRange('1h')">1h</button>
+        <button :class="{ active: detail.range === '24h' }" @click="setRange('24h')">24h</button>
+        <button :class="{ active: detail.range === '7d' }" @click="setRange('7d')">7d</button>
+      </div>
+    </div>
+    <div class="chart-area">
+      <canvas id="detail-latency-canvas"></canvas>
+    </div>
+    <div class="chart-legend">
+      <div class="lg"><span class="ln" style="background:#60a5fa"></span>Latenz</div>
+      <div class="lg"><span class="ln" style="background:#ef4444"></span>Aussetzer</div>
+      <div class="lg"><span class="ln" style="background:#fbbf24"></span>Spike</div>
+    </div>
+  </div>
+
+  <div class="right-stack">
+    <div class="stat-panel">
+      <div class="pt">Perzentile</div>
+      <div class="perc-rows">
+        <template x-for="(v,k) in (detail.overview && detail.overview.percentiles) || {}" :key="k">
+          <div class="perc-row">
+            <div class="lbl" x-text="k"></div>
+            <div class="bar"><div :style="{ width: percBarWidth(v, detail.overview.percentiles) }"></div></div>
+            <div class="val" x-text="formatLatency(v) + ' ms'"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="det-bottom det-bottom--3col">
+  <div class="ping-log">
+    <div class="ph"><div class="pt">Live-Pings</div><div class="live-tag">LIVE</div></div>
+    <div class="ping-stream">
+      <template x-for="p in (detail.livePings || []).slice(0, 9)" :key="p.ts_ms + '-' + p.sequence">
+        <div>
+          <span class="t" x-text="formatTime(p.ts_ms)"></span>
+          <span :class="p.success ? 'ok' : 'fail'" x-text="p.success ? formatLatency(p.latency_us) + ' ms' : 'timeout'"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="pw-panel pw-route-panel">
+    <div class="ph">
+      <div class="pt">Aktuelle Route</div>
+      <div class="pr" x-text="detail.trace ? (detail.trace.hop_count + ' Hops · ' + (detail.trace.route_changed ? 'Routen-Wechsel' : 'stabil')) : '—'"></div>
+    </div>
+    <div class="pb">
+      <template x-if="detail.trace && detail.trace.hops && detail.trace.hops.length">
+        <div class="tr-hops">
+          <template x-for="hop in (detail.trace.hops || [])" :key="hop.hop_no">
+            <div class="tr-hop" :class="hopClass(hop)">
+              <div class="n" x-text="hop.hop_no"></div>
+              <div class="h">
+                <span x-text="hop.host || hop.ip || '*'"></span>
+                <small x-text="hop.ip || ''"></small>
+              </div>
+              <div class="rtt" x-text="formatLatency(hop.rtt_us) + ' ms'"></div>
+              <div class="ls" x-text="(hop.loss_pct || 0).toFixed(1) + '%'"></div>
+              <div class="dt" x-text="hop.is_suspect ? '!' : ''"></div>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!detail.trace || !detail.trace.hops || !detail.trace.hops.length">
+        <div style="font-size:11px;color:#6b7280;font-style:italic;padding:20px 0;text-align:center">noch kein Trace</div>
+      </template>
+    </div>
+  </div>
+
+  <div class="stat-panel">
+    <div class="pt">Histogramm</div>
+    <div class="histogram">
+      <template x-for="(c,i) in (detail.overview && detail.overview.histogram && detail.overview.histogram.counts) || []" :key="i">
+        <div class="bin" :class="{ tail: i >= 16, outlier: i === 20 }" :style="{ height: histBinHeight(c, detail.overview.histogram.counts) }"></div>
+      </template>
+    </div>
+    <div class="hist-axis"><span>0</span><span>125 ms</span><span>250+</span></div>
+  </div>
+</div>

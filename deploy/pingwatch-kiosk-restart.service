@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart pingwatch-kiosk service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl --user restart pingwatch-kiosk.service

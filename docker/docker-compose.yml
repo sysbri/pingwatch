@@ -1,0 +1,70 @@
+name: pingwatch
+
+services:
+  pingwatch:
+    image: pingwatch:local
+    container_name: pingwatch
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    network_mode: host
+    cap_drop:
+      - ALL
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run:size=8m
+    volumes:
+      - pingwatch-data:/data
+      - type: bind
+        source: /media
+        target: /media
+        bind:
+          propagation: rshared
+      - /sys/class/net:/host/sys/class/net:ro
+      # Make the host helper FIFO visible inside the container so that the
+      # UI's restart / factory-reset / update-check actions actually reach
+      # the host daemon. The FIFO file is created by
+      # pingwatch-host-helper.service before this container starts.
+      - type: bind
+        source: /run/pingwatch-host.fifo
+        target: /run/pingwatch-host.fifo
+      # Shared directory for host-helper to drop result JSON files
+      # (wifi-scan.json, wifi-status.json, wifi-result.json). Read-only
+      # from the container's perspective.
+      - type: bind
+        source: /run/pingwatch-shared
+        target: /run/pingwatch-shared
+        read_only: true
+      # Live-reload of Python source from host (was added when deploying
+      # via rsync without rebuilding the image).
+      - /opt/pingwatch/src/pingwatch:/app/src/pingwatch:ro
+    environment:
+      PINGWATCH_DB: /data/pingwatch.db
+      PINGWATCH_CONFIG: /data/config.yaml
+      PINGWATCH_BIND_HOST: 127.0.0.1
+      PINGWATCH_BIND_PORT: "5000"
+      PINGWATCH_WLAN_IF: wlan0
+      # /media itself is bind-mounted from the host; the udev rule mounts
+      # USB sticks under /media/pingwatch-usb/, so that is where the
+      # exporter must write — not /media (which would land outside the
+      # stick on the host).
+      PINGWATCH_USB_ROOT: /media/pingwatch-usb
+      TZ: Europe/Berlin
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-m", "2", "http://127.0.0.1:5000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  pingwatch-data:
+    driver: local

@@ -1,0 +1,123 @@
+<h3>WLAN-Ueberwachung</h3>
+<p class="pw-sec-hint">PingWatch misst Signal-Staerke + Re-Assoziationen via "iw dev wlan0 link" + nl80211. Wird benutzt um Aussetzer als WLAN-Problem (statt Netzwerk-Problem) zu klassifizieren.</p>
+<p class="pw-sec-hint"><strong>Hinweis:</strong> Hier kannst du das WLAN wechseln. Ein Pi-Neustart ist beim WLAN-Wechsel <strong>nicht</strong> noetig &mdash; NetworkManager uebernimmt das live.</p>
+
+<!-- Aktuelles Netzwerk -->
+<div class="wifi-current" :class="{ 'is-disconnected': wifi.status && !wifi.status.connected }">
+  <template x-if="wifi.status && wifi.status.connected">
+    <div>
+      <div class="wifi-current-hdr">
+        <span class="wifi-current-ssid" x-text="wifi.status.ssid || '-'"></span>
+        <span class="wifi-badge wifi-badge-ok">verbunden</span>
+      </div>
+      <div class="wifi-current-meta">
+        <span>Signal: <strong x-text="(wifi.status.signal_pct ?? '-') + '%'"></strong></span>
+        <span>RSSI: <strong x-text="(wifi.status.rssi_dbm ?? '-') + ' dBm'"></strong></span>
+        <span>Bitrate: <strong x-text="(wifi.status.bitrate_mbps ?? '-') + ' Mbit/s'"></strong></span>
+        <span>Freq: <strong x-text="(wifi.status.freq ?? '-') + ' MHz'"></strong></span>
+      </div>
+    </div>
+  </template>
+  <template x-if="!wifi.status || !wifi.status.connected">
+    <div class="wifi-current-hdr">
+      <span class="wifi-current-ssid">Keine Verbindung</span>
+      <span class="wifi-badge wifi-badge-err">offline</span>
+    </div>
+  </template>
+</div>
+
+<!-- Error-Banner -->
+<div class="wifi-error" x-show="wifi.lastError" x-cloak>
+  <strong>Fehler:</strong> <span x-text="wifi.lastError"></span>
+</div>
+
+<!-- Verfuegbare Netzwerke -->
+<div class="wifi-list-hdr">
+  <h4>Verfuegbare Netzwerke</h4>
+  <button class="set-btn" @click="scanNetworks()" :disabled="wifi.scanning">
+    <span x-show="!wifi.scanning">Scannen</span>
+    <span x-show="wifi.scanning" x-cloak>Scanne...</span>
+  </button>
+</div>
+
+<div class="wifi-list">
+  <template x-for="net in wifi.networks" :key="net.ssid + '_' + (net.channel || 0)">
+    <div class="wifi-row" :class="{ 'is-active': net.in_use }">
+      <div class="wifi-row-main">
+        <div class="wifi-row-ssid" x-text="net.ssid || '(versteckt)'"></div>
+        <div class="wifi-row-meta">
+          <span class="wifi-signal-bar" :data-level="Math.ceil((net.signal||0)/20)">
+            <span x-text="(net.signal ?? 0) + '%'"></span>
+          </span>
+          <span class="wifi-sec-badge" x-text="net.security || 'Open'"></span>
+          <span x-show="net.in_use" class="wifi-badge wifi-badge-ok">aktiv</span>
+        </div>
+      </div>
+      <button class="set-btn" @click="openConnectModal(net)" :disabled="wifi.connecting === net.ssid || net.in_use">
+        <span x-show="wifi.connecting !== net.ssid">Verbinden</span>
+        <span x-show="wifi.connecting === net.ssid" x-cloak>...</span>
+      </button>
+    </div>
+  </template>
+  <div class="wifi-empty" x-show="!wifi.networks.length && !wifi.scanning" x-cloak>
+    Noch kein Scan durchgefuehrt. Klicke "Scannen" um Netzwerke zu suchen.
+  </div>
+</div>
+
+<!-- Connect-Modal -->
+<div class="wifi-connect-modal" x-show="wifi.showConnectModal" x-cloak @keydown.escape.window="closeConnectModal()">
+  <div class="wifi-modal-card">
+    <h4>Mit <span x-text="wifi.modalSsid"></span> verbinden</h4>
+    <div class="wifi-modal-sec" x-text="'Sicherheit: ' + (wifi.modalSecurity || 'Open')"></div>
+    <template x-if="wifi.modalSecurity && wifi.modalSecurity !== '' && wifi.modalSecurity.toLowerCase() !== 'open'">
+      <div class="set-row">
+        <div class="lbl">Passwort
+          <small>WPA/WPA2/WPA3-Passwort fuer das ausgewaehlte Netz.</small>
+        </div>
+        <input type="password" class="set-inp" x-model="wifi.modalPassword" autocomplete="new-password" @keydown.enter="connectWifi()">
+      </div>
+    </template>
+    <div class="wifi-error" x-show="wifi.lastError" x-cloak>
+      <strong>Fehler:</strong> <span x-text="wifi.lastError"></span>
+    </div>
+    <div class="wifi-modal-actions">
+      <button class="set-btn set-btn-ghost" @click="closeConnectModal()" :disabled="wifi.connecting">Abbrechen</button>
+      <button class="set-btn" @click="connectWifi()" :disabled="wifi.connecting">
+        <span x-show="!wifi.connecting">Verbinden</span>
+        <span x-show="wifi.connecting" x-cloak>Verbinde...</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Monitoring-Einstellungen (bestehend) -->
+<div class="set-row">
+  <div class="lbl">Interface
+    <small>Name des Wireless-Devices. Standard wlan0. Aendere nur wenn dein Pi mehrere Interfaces hat.</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['wifi.interface']">
+</div>
+<div class="set-row">
+  <div class="lbl">Erwartete SSID
+    <small>PingWatch warnt wenn der Pi sich versehentlich auf ein anderes Netz verbindet. Leer = jede SSID akzeptieren.</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['wifi.expected_ssid']">
+</div>
+<div class="set-row">
+  <div class="lbl">RSSI Warn-Schwelle (dBm)
+    <small>Signal-Staerke unter diesem Wert (z.B. -80) loest eine "RSSI low"-Warnung aus. Realistische Werte: -50 sehr stark, -70 ok, -80 schwach.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['wifi.rssi_warning_dbm']">
+</div>
+<div class="set-row">
+  <div class="lbl">Reassoc-min-Dauer (ms)
+    <small>Re-Assoziationen kuerzer als das werden ignoriert (Roaming zwischen APs). Laenger = als Aussetzer geloggt.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['wlan.reassoc_min_duration_ms']">
+</div>
+<div class="set-row">
+  <div class="lbl">Reassoc zaehlt als Outage
+    <small>Wenn aktiv, wird jede Re-Assoziation &gt; min-Dauer in die Outage-Liste eingetragen.</small>
+  </div>
+  <input type="checkbox" x-model="settings['wifi.reassoc_counts_as_outage']">
+</div>

@@ -1,0 +1,81 @@
+<h3>Aufbewahrung &amp; Log-Export</h3>
+<p class="pw-sec-hint">Daten-Aufbewahrungs-Richtlinien + Manuell-Export-Optionen. Standard-Retention reicht fuer ~30 Tage Detail-Analyse bei vier Zielen mit 1 Hz.</p>
+
+<div class="exp-range">
+  <div class="ti">Zeitraum
+    <small style="display:block;color:#9ca3af;font-size:12px;line-height:1.45;margin-top:4px;font-weight:400">Steuert die zeitliche Filterung aller Export-Files.</small>
+  </div>
+  <div class="seg">
+    <select class="date-pick" x-model="exportRange">
+      <option value="1h">1 Stunde</option>
+      <option value="24h">24 Stunden</option>
+      <option value="7d">7 Tage</option>
+      <option value="30d">30 Tage</option>
+      <option value="all">alles</option>
+    </select>
+  </div>
+  <div class="exp-range-hint">Gilt für alle Export-Formate unten. „alles“ exportiert bis zu 365 Tage.</div>
+</div>
+
+<div class="exp-grid">
+  <div class="exp-card">
+    <div class="icon"></div>
+    <div class="ti">CSV</div>
+    <div class="ds">Flat tabellarisch — geeignet für Excel/Numbers.</div>
+    <button class="btn" @click="exportData('csv')" :disabled="exportBusy" x-text="exportBusy === 'csv' ? 'Wird erstellt…' : 'Exportieren'">Exportieren</button>
+  </div>
+  <div class="exp-card">
+    <div class="icon">{ }</div>
+    <div class="ti">JSON</div>
+    <div class="ds">Strukturiert, inkl. Outages und Settings-Dump.</div>
+    <button class="btn" @click="exportData('json')" :disabled="exportBusy" x-text="exportBusy === 'json' ? 'Wird erstellt…' : 'Exportieren'">Exportieren</button>
+  </div>
+  <div class="exp-card">
+    <div class="icon">ZIP</div>
+    <div class="ti">ZIP-Bundle</div>
+    <div class="ds">CSV + JSON + Config + Logs in einer Datei.</div>
+    <button class="btn" @click="exportData('zip')" :disabled="exportBusy" x-text="exportBusy === 'zip' ? 'Wird erstellt…' : 'Exportieren'">Exportieren</button>
+  </div>
+  <div class="exp-card">
+    <div class="icon">CSV</div>
+    <div class="ti">DB-Snapshot</div>
+    <div class="ds">SQLite-Hot-Backup via con.backup() — vollständig konsistent.</div>
+    <button class="btn" @click="exportData('db-snapshot')" :disabled="exportBusy" x-text="exportBusy === 'db-snapshot' ? 'Wird erstellt…' : 'Exportieren'">Exportieren</button>
+  </div>
+  <div class="exp-card" :class="{ 'is-warn': usbAvailable === false }">
+    <div class="icon">USB</div>
+    <div class="ti">USB-Stick</div>
+    <div class="ds">Schreibt ZIP auf /media/pingwatch-usb.</div>
+    <div class="sub-info">/media/pingwatch-usb/pingwatch-export-&lt;ts&gt;.zip</div>
+    <div class="exp-usb-hint" x-show="usbAvailable === false" x-cloak>Kein USB-Stick erkannt — bitte FAT32/ext4-Stick einstecken und Mountpoint /media/pingwatch-usb prüfen.</div>
+    <div class="exp-usb-hint exp-usb-hint--ok" x-show="usbAvailable === true" x-cloak>Letzter Schreibversuch erfolgreich.</div>
+    <button class="btn" @click="exportUSB()" :disabled="exportBusy" x-text="exportBusy === 'usb' ? 'Schreibt…' : 'Auf Stick schreiben'">Auf Stick schreiben</button>
+  </div>
+</div>
+
+<h4 style="font-size:13px;margin-top:18px;margin-bottom:8px">Aufbewahrung (Tage)</h4>
+<p class="pw-sec-hint">Wie lange die jeweilige Datenklasse in der SQLite-DB gehalten wird. Aeltere Daten werden via Retention-Job geloescht.</p>
+<div class="set-row">
+  <div class="lbl">Roh-Pings
+    <small>Einzelne 1Hz-Ping-Messungen mit RTT/Loss. Detailliert aber gross &mdash; default 7 Tage reicht fuer Spike-Forensik.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['retention.raw_pings_days']">
+</div>
+<div class="set-row">
+  <div class="lbl">Stuendliche Aggregate
+    <small>Pro Stunde verdichtete Werte (p50/p95/loss%). Klein und schnell &mdash; default 90 Tage fuer Langzeit-Trends.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['retention.hourly_aggregates_days']">
+</div>
+<div class="set-row">
+  <div class="lbl">Outages
+    <small>Erkannte Ausfaelle mit Start/Ende/Dauer. Sehr klein &mdash; default lang halten fuer Reporting/Eskalationen.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['retention.outages_days']">
+</div>
+<div class="set-row">
+  <div class="lbl">Traceroutes
+    <small>Hop-by-Hop-Snapshots die bei Outages automatisch erstellt werden. Mittelgross.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['retention.traces_days']">
+</div>

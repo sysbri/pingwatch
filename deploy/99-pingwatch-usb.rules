@@ -1,0 +1,5 @@
+# Auto-mount the first detected USB mass-storage partition to a fixed path.
+ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEMS=="usb", \
+  RUN+="/usr/local/bin/pingwatch-usb-mount %k"
+ACTION=="remove", KERNEL=="sd[a-z][0-9]", SUBSYSTEMS=="usb", \
+  RUN+="/usr/local/bin/pingwatch-usb-umount %k"

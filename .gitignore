@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data / runtime
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+
+# Build / packaging artefacts
+*.tar.gz
+/opt/
+
+# Workflow / debug outputs
+audit/
+screenshots/
+tasks/
+.claude/
+
+# Cloud-init / image-bootstrap (may contain WiFi PSK)
+cloud-init/
+*-user-data
+*-network-config
+*-meta-data
+
+# Local env files
+.env
+.env.*
+!.env.example

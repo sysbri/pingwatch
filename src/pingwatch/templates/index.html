@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {# Three screens — Alpine toggles visibility via currentScreen state. #}
+  <div class="screen" :class="{ active: currentScreen === 'dashboard' }" data-screen="dashboard">
+    {% include "dashboard.html" %}
+  </div>
+
+  <div class="screen" :class="{ active: currentScreen === 'detail' }" data-screen="detail">
+    {% include "detail.html" %}
+  </div>
+
+  <div class="screen" :class="{ active: currentScreen === 'settings' }" data-screen="settings">
+    {% include "settings.html" %}
+  </div>
+{% endblock %}

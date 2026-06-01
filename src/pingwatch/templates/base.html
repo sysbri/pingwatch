@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PingWatch{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/pingwatch.css">
+  <script defer src="/static/vendor/chart.umd.min.js"></script>
+  <script defer src="/static/js/charts.js"></script>
+  <script defer src="/static/js/app.js"></script>
+  <!-- Alpine MUST be last — it self-starts via queueMicrotask right after this
+       script executes, so all pingwatch()/Alpine.data() definitions must be in
+       scope first. -->
+  <script defer src="/static/vendor/alpine.min.js"></script>
+</head>
+<body>
+  <div class="fhd-wrap" id="wrap">
+    <div class="fhd-frame" id="frame">
+      <div class="pw" x-data="pingwatch()" x-init="boot()">
+        {# Persistent header — present on every screen. #}
+        <div class="pw-head">
+          <div class="brand" @click="goto('dashboard')">
+            <div class="pip"></div>
+            <span>PingWatch</span>
+          </div>
+          <div class="clock"><span class="pw-mono" x-text="clockText"></span></div>
+          <div class="wifi">
+            <span class="ssid" x-text="(dashboard.wifi && dashboard.wifi.ssid) || '—'"></span>
+            <span class="pw-mono" x-text="(dashboard.wifi && dashboard.wifi.rssi != null) ? dashboard.wifi.rssi + ' dBm' : '—'"></span>
+            <span class="bars"><span style="height:4px"></span><span style="height:7px"></span><span style="height:10px"></span><span style="height:13px"></span></span>
+            <button class="settings-btn" @click="goto('settings', 'allgemein')">Einstellungen</button>
+          </div>
+        </div>
+
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

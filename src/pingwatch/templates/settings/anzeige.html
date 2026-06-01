@@ -1,0 +1,23 @@
+<h3>Anzeige</h3>
+<p class="pw-sec-hint">Visualisierungs-Optionen fuer die Oberflaeche.</p>
+
+<div class="set-row">
+  <div class="lbl">Dashboard-Refresh (ms)
+    <small>Wie haeufig die Live-Daten im Dashboard erneuert werden (1000-5000 ms sinnvoll). Niedriger = fluessiger, hoeher = entlastet den Pi.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['ui.dashboard_refresh_ms']">
+</div>
+<div class="set-row">
+  <div class="lbl">Grossschrift-Modus
+    <small>Doppelte Schriftgroesse + reduzierte Datendichte fuer Ablesen aus mehreren Metern Entfernung (Wand-Anzeige).</small>
+  </div>
+  <input type="checkbox" x-model="settings['ui.large_mode']">
+</div>
+<div class="set-row">
+  <div class="lbl">Theme
+    <small>Dunkel ist Standard fuer 24/7-Monitor-Betrieb. Hell fuer Tagsicht.</small>
+  </div>
+  <select class="set-inp" x-model="settings['ui.theme']">
+    <option value="dark">Dunkel</option><option value="light">Hell</option>
+  </select>
+</div>

@@ -1,0 +1,41 @@
+<h3>Allgemein</h3>
+<p class="pw-sec-hint">Grundlegende Identifikation des Geraets, Sprache, Zeitzone und Anzeige-Defaults.</p>
+
+<div class="set-row">
+  <div class="lbl">Geraetename
+    <small>Wird im Dashboard-Header angezeigt + in Export-Dateinamen verwendet.</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['device.name']">
+</div>
+<div class="set-row">
+  <div class="lbl">Sprache
+    <small>Anzeigesprache der Oberflaeche. Logs bleiben technisch englisch.</small>
+  </div>
+  <select class="set-inp" x-model="settings['ui.language']">
+    <option value="de">Deutsch</option>
+    <option value="en">English</option>
+  </select>
+</div>
+<div class="set-row">
+  <div class="lbl">Zeitzone
+    <small>Beeinflusst alle Zeitstempel im Dashboard und Log-Export.</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['ui.timezone']">
+</div>
+<div class="set-row">
+  <div class="lbl">Theme
+    <small>Dunkel ist Standard fuer 24/7-Monitor-Betrieb. Hell fuer Tagsicht.</small>
+  </div>
+  <select class="set-inp" x-model="settings['ui.theme']">
+    <option value="dark">Dunkel</option>
+    <option value="light">Hell</option>
+  </select>
+</div>
+<div class="set-row">
+  <div class="lbl">Standard-Zeitraum
+    <small>Welcher Zeitbereich wird beim Oeffnen der Detail-Ansichten angezeigt.</small>
+  </div>
+  <select class="set-inp" x-model="settings['ui.default_time_range']">
+    <option>1h</option><option>24h</option><option>7d</option>
+  </select>
+</div>

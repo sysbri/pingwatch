@@ -1,0 +1,10 @@
+#!/bin/sh
+# Block until the dashboard responds on /healthz.
+for i in $(seq 1 60); do
+  if curl -fsS -m 2 http://127.0.0.1:5000/healthz >/dev/null 2>&1; then
+    exit 0
+  fi
+  sleep 1
+done
+echo "pingwatch did not come up in 60s" >&2
+exit 1

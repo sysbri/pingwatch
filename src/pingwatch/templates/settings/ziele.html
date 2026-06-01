@@ -1,0 +1,78 @@
+<h3>Ueberwachte Ziele</h3>
+<p class="hint">PingWatch sendet jede Sekunde einen Ping zu jedem Ziel. Jeweils <b>ein</b> Ziel sollte als <b>gateway</b> markiert sein (typischerweise dein Router). Alle anderen Ziele als <b>external</b>. Diese Unterscheidung erlaubt die "UPLINK"-Klassifizierung von Aussetzern: wenn alle externen Ziele aus sind aber das Gateway noch antwortet, lag der Ausfall beim Provider, nicht im Heimnetz.</p>
+
+<div class="tgt-list">
+  <template x-for="t in (targets || [])" :key="t.id">
+    <div class="tgt-card">
+      <div class="tgt-row-name">
+        <input type="text" :value="t.name" placeholder="Name"
+               @change="updateTarget(t.id, {name: $event.target.value})">
+        <input type="text" :value="t.address" placeholder="Adresse / Host"
+               @change="updateTarget(t.id, {address: $event.target.value})">
+      </div>
+      <div class="tgt-row-meta">
+        <label>Typ
+          <select :value="t.type" @change="updateTarget(t.id, {type: $event.target.value})">
+            <option value="ICMP">ICMP</option>
+            <option value="TCP">TCP</option>
+            <option value="HTTP">HTTP</option>
+            <option value="DNS">DNS</option>
+          </select>
+        </label>
+        <label>Kategorie
+          <select :value="t.kind" @change="updateTarget(t.id, {kind: $event.target.value})">
+            <option value="gateway">Gateway (lokaler Router)</option>
+            <option value="external">External (Internet)</option>
+          </select>
+        </label>
+        <label>Intervall (ms)
+          <input type="number" min="200" step="100" :value="t.interval_ms"
+                 @change="updateTarget(t.id, {interval_ms: Math.max(200, parseInt($event.target.value)||1000)})">
+        </label>
+        <label>Aktiv
+          <input type="checkbox" :checked="t.enabled"
+                 @change="updateTarget(t.id, {enabled: $event.target.checked})">
+        </label>
+      </div>
+      <div class="tgt-row-actions">
+        <button class="btn" @click="testTarget(t.id)">Test ausfuehren</button>
+        <button class="btn danger" @click="if(confirm('Ziel wirklich loeschen?')) deleteTarget(t.id)">Loeschen</button>
+      </div>
+    </div>
+  </template>
+</div>
+
+<h3 style="margin-top:28px">Neues Ziel anlegen</h3>
+<p class="hint">Tipp: dein lokaler Router meldet sich meist auf <b>192.168.X.1</b> oder <b>10.X.X.1</b>. Wenn du nicht sicher bist welcher das ist, lass das Gateway-Ziel weg — Cloudflare (1.1.1.1), Google (8.8.8.8) und ein Provider-Ziel reichen fuer Aussetzer-Erkennung aus. <br><br>Du kannst auch <b>interne Ziele</b> (z.B. NAS, weitere AP, Drucker) zusaetzlich anlegen — markiere sie dann am besten als <b>gateway</b>-Kategorie, damit ihr Ausfall nicht faelschlicherweise als Internet-Ausfall (UPLINK) erscheint. Als <b>external</b> markierte interne Hosts wuerden bei Ausfall die Heuristik verwirren und ggf. einen UPLINK-Alarm ausloesen, obwohl das WAN noch laeuft.</p>
+
+<div class="tgt-card tgt-add">
+  <div class="tgt-row-name">
+    <input type="text" placeholder="Name (z.B. Router, Cloudflare, NAS)" x-model="newTarget.name">
+    <input type="text" placeholder="Adresse / Host (z.B. 1.1.1.1)" x-model="newTarget.address">
+  </div>
+  <div class="tgt-row-meta">
+    <label>Typ
+      <select x-model="newTarget.type">
+        <option value="ICMP">ICMP</option>
+        <option value="TCP">TCP</option>
+        <option value="HTTP">HTTP</option>
+        <option value="DNS">DNS</option>
+      </select>
+    </label>
+    <label>Kategorie
+      <select x-model="newTarget.kind">
+        <option value="gateway">Gateway (lokaler Router / internes Ziel)</option>
+        <option value="external">External (Internet)</option>
+      </select>
+    </label>
+    <label>Intervall (ms)
+      <input type="number" min="200" step="100" x-model.number="newTarget.interval_ms">
+    </label>
+    <label>Aktiv
+      <input type="checkbox" x-model="newTarget.enabled">
+    </label>
+  </div>
+  <div class="tgt-row-actions">
+    <button class="btn primary" @click="createTarget()">Anlegen</button>
+  </div>
+</div>

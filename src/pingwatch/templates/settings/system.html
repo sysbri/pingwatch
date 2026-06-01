@@ -1,0 +1,37 @@
+<h3>System &amp; Diagnose</h3>
+<p class="pw-sec-hint">Live-Hardware-Werte des Pi. Werden alle 5 s aktualisiert.</p>
+
+<div class="sys-grid">
+  <div class="sys-card"><div class="l">CPU</div><div class="v" x-text="(system.cpu_pct || 0) + ' %'"></div></div>
+  <div class="sys-card"><div class="l">RAM</div><div class="v" x-text="(system.ram_used_mb || 0) + ' MB'"><small> / <span x-text="system.ram_total_mb || 0"></span> MB</small></div></div>
+  <div class="sys-card"><div class="l">Temp</div><div class="v" x-text="(system.temp_c != null ? system.temp_c : '—') + ' °C'"></div></div>
+  <div class="sys-card"><div class="l">SD-Belegung</div><div class="v" x-text="(system.sd_used_gb || 0) + ' GB'"><small> / <span x-text="system.sd_total_gb || 0"></span> GB</small></div></div>
+  <div class="sys-card"><div class="l">DB-Größe</div><div class="v" x-text="(system.db_size_mb || 0) + ' MB'"></div></div>
+  <div class="sys-card"><div class="l">Uptime</div><div class="v" x-text="formatDuration((system.uptime_seconds || 0) * 1000)"></div></div>
+  <div class="sys-card"><div class="l">Version</div><div class="v" x-text="system.version || '—'"></div></div>
+  <div class="sys-card"><div class="l">WLAN</div><div class="v" x-text="(system.wifi && system.wifi.ssid) || '—'"><small> · <span x-text="(system.wifi && system.wifi.rssi) || '—'"></span> dBm</small></div></div>
+</div>
+
+<h4 style="font-size:13px;margin-top:18px;margin-bottom:8px">Aktionen</h4>
+<div class="exp-grid">
+  <div class="exp-card">
+    <div class="ti">Diagnose-Bundle</div>
+    <div class="ds">Sammelt Logs, Settings, letzte Outages.</div>
+    <button class="btn" @click="downloadDiagnose()">Bundle herunterladen</button>
+  </div>
+  <div class="exp-card">
+    <div class="ti">Datenbestand löschen</div>
+    <div class="ds">Behält Ziele &amp; Settings, löscht Metriken.</div>
+    <button class="btn" @click="clearData()">Daten löschen</button>
+  </div>
+  <div class="exp-card">
+    <div class="ti">Neustart</div>
+    <div class="ds">Pi-Host bekommt restart-Befehl über FIFO.</div>
+    <button class="btn" @click="restartSystem()">Neustart</button>
+  </div>
+  <div class="exp-card danger">
+    <div class="ti">Werksreset</div>
+    <div class="ds">Löscht alle Daten und Ziele — Settings bleiben.</div>
+    <button class="btn" @click="factoryReset()">Werksreset</button>
+  </div>
+</div>

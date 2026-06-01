@@ -1,0 +1,57 @@
+<h3>Live-Traffic (Stream + Heartbeat)</h3>
+<p class="pw-sec-hint">Erzeugt dauerhaften Hintergrund-Traffic damit auch Sub-Sekunden-Aussetzer erkannt werden, die der 1Hz-Ping nicht sieht.</p>
+
+<div class="set-row">
+  <div class="lbl">Stream aktiv
+    <small>HTTPS-Trickle-Stream aktivieren. Laeuft im Hintergrund und meldet jede Byte-Pause als Verbindungsabriss.</small>
+  </div>
+  <input type="checkbox" x-model="settings['stream.enabled']">
+</div>
+<div class="set-row">
+  <div class="lbl">Stream Endpoint
+    <small>Ziel des HTTPS-Trickle-Streams. Standard ist Cloudflares Speed-Test-Endpoint (gemacht fuer Dauerlauf).</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['stream.endpoint']">
+</div>
+<div class="set-row">
+  <div class="lbl">Ziel-kbps
+    <small>Geschwindigkeit des Dauer-Downloads. 20 kbps = ~6 MB/h = ~150 MB/Tag. Lueckenlos = OK, Byte-Pause = Verbindungsabriss erkannt.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['stream.target_kbps']">
+</div>
+<div class="set-row">
+  <div class="lbl">Tageslimit (MB)
+    <small>Sicherheitsbremse bei Volumen-Tarifen. Nach Erreichen pausiert Stream bis Mitternacht.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['stream.daily_cap_mb']">
+</div>
+<div class="set-row">
+  <div class="lbl">Zero-kbps min samples
+    <small>Nach wie vielen 0-Byte-Sekunden gilt der Stream als unterbrochen. Default 1.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['stream.zero_kbps_min_samples']">
+</div>
+<div class="set-row">
+  <div class="lbl">TCP-Heartbeat
+    <small>Zweite Erkennungs-Spur ueber persistente TCP-Verbindung mit Mini-Paketen alle 200 ms.</small>
+  </div>
+  <input type="checkbox" x-model="settings['heartbeat.enabled']">
+</div>
+<div class="set-row">
+  <div class="lbl">Heartbeat Ziel
+    <small>TCP-Endpoint (Host:Port) fuer den Heartbeat. Standard 1.1.1.1:443.</small>
+  </div>
+  <input type="text" class="set-inp" x-model="settings['heartbeat.target']">
+</div>
+<div class="set-row">
+  <div class="lbl">Heartbeat-Intervall (ms)
+    <small>Wie haeufig ein Heartbeat-Paket gesendet wird.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['heartbeat.interval_ms']">
+</div>
+<div class="set-row">
+  <div class="lbl">Heartbeat Miss-Threshold (ms)
+    <small>Nach wie vielen ms ohne Antwort wird ein Heartbeat als "loss" gewertet.</small>
+  </div>
+  <input type="number" class="set-inp" x-model.number="settings['heartbeat.miss_threshold_ms']">
+</div>

@@ -1,0 +1,42 @@
+{# Settings screen — sidebar + 8 sub-templates #}
+
+{# FIX 11: Settings hat keine Alarm-Semantik → neutralen (ok) Header verwenden,
+   damit der orange Border weg ist. #}
+<div class="det-head ok">
+  <div class="left">
+    <div class="back" @click="goto('dashboard')">←</div>
+    <div class="title-block">
+      <div class="crumb">Dashboard · Einstellungen</div>
+      <div class="title">Einstellungen</div>
+      <div class="sub">PingWatch · Konfiguration & Diagnose</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn" @click="loadSettings()">Neu laden</button>
+    <button class="btn primary" @click="saveSettings()">Speichern</button>
+  </div>
+</div>
+
+<div class="det-main" style="grid-template-columns: 240px 1fr; flex:1; min-height:0">
+  <div class="stat-panel" style="padding:14px 6px">
+    <div class="set-side-item" :class="{ active: settings_sub === 'allgemein' }" @click="switchSettingsSub('allgemein')" data-sub="allgemein">Allgemein</div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'ziele' }" @click="switchSettingsSub('ziele')" data-sub="ziele">Ziele <span class="badge" x-text="(targets || []).length"></span></div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'traffic' }" @click="switchSettingsSub('traffic')" data-sub="traffic">Live-Traffic</div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'alarme' }" @click="switchSettingsSub('alarme')" data-sub="alarme">Aussetzer-Erkennung</div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'wlan' }" @click="switchSettingsSub('wlan')" data-sub="wlan">WLAN-Überwachung</div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'export' }" @click="switchSettingsSub('export')" data-sub="export">Aufbewahrung &amp; Log-Export</div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'anzeige' }" @click="switchSettingsSub('anzeige')" data-sub="anzeige">Anzeige</div>
+    <div class="set-side-item" :class="{ active: settings_sub === 'system' }" @click="switchSettingsSub('system')" data-sub="system">System &amp; Diagnose</div>
+  </div>
+
+  <div class="chart-panel" style="overflow:auto">
+    <div class="set-sub" :class="{ active: settings_sub === 'allgemein' }" data-sub="allgemein">{% include "settings/allgemein.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'ziele' }" data-sub="ziele">{% include "settings/ziele.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'traffic' }" data-sub="traffic">{% include "settings/traffic.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'alarme' }" data-sub="alarme">{% include "settings/alarme.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'wlan' }" data-sub="wlan">{% include "settings/wlan.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'export' }" data-sub="export">{% include "settings/export.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'anzeige' }" data-sub="anzeige">{% include "settings/anzeige.html" %}</div>
+    <div class="set-sub" :class="{ active: settings_sub === 'system' }" data-sub="system">{% include "settings/system.html" %}</div>
+  </div>
+</div>

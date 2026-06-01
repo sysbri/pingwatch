@@ -1,0 +1,9 @@
+#!/bin/sh
+# udev handler: mount $1 (e.g., sda1) under /media/pingwatch-usb owned by the container user.
+set -eu
+DEV="/dev/$1"
+MNT="/media/pingwatch-usb"
+mkdir -p "$MNT"
+mount -o noatime,uid=10001,gid=10001,umask=0022 "$DEV" "$MNT" 2>/dev/null \
+  || mount "$DEV" "$MNT"
+echo "$DEV" > "$MNT/.pingwatch-mounted"

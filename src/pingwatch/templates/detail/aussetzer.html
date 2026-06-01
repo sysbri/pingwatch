@@ -1,0 +1,82 @@
+{# Aussetzer tab — filterable list + selected outage detail. #}
+
+<div class="filter-bar">
+  <span class="lbl">Filter</span>
+  <button class="chip" :class="{ active: detail.filterTypes.includes('EINZEL') }" @click="toggleFilter('EINZEL')">EINZEL</button>
+  <button class="chip" :class="{ active: detail.filterTypes.includes('MULTI') }" @click="toggleFilter('MULTI')">MULTI</button>
+  <button class="chip" :class="{ active: detail.filterTypes.includes('UPLINK') }" @click="toggleFilter('UPLINK')">UPLINK</button>
+  <button class="chip" :class="{ active: detail.filterTypes.includes('WLAN') }" @click="toggleFilter('WLAN')">WLAN</button>
+  <button class="chip" :class="{ active: detail.filterTypes.includes('STREAM') }" @click="toggleFilter('STREAM')">STREAM</button>
+  <input class="search" type="search" placeholder="Suche…" x-model="detail.filterSearch" @input="loadOutages()">
+  <div class="spacer"></div>
+  <span class="ct-pill"><b x-text="(detail.outages && detail.outages.length) || 0"></b> Treffer</span>
+</div>
+
+<div class="ot-main">
+  <div class="ot-list">
+    <div class="ph">
+      <span class="pt">Aussetzer</span>
+      <span>chronologisch</span>
+    </div>
+    <div style="overflow:auto;flex:1">
+      <template x-for="o in (detail.outages || [])" :key="o.id">
+        <div class="ot-row" :class="{ selected: detail.selectedOutageId === o.id }" @click="selectOutage(o.id)">
+          <div class="t" x-text="formatTime(o.start_ts_ms)"><small x-text="formatDate(o.start_ts_ms)"></small></div>
+          <div class="info">
+            <div class="desc">
+              <span class="tag" :class="o.type.toLowerCase()" x-text="o.type"></span>
+              <span x-text="o.dest_name || ''"></span>
+            </div>
+            <div class="meta" x-text="(o.lost_count || 0) + ' Pings verloren'"></div>
+          </div>
+          <div class="dur" :class="{ lng: o.duration_ms > 30000 }" x-text="formatDuration(o.duration_ms || 0)"></div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="ot-detail">
+    <template x-if="detail.selectedOutage">
+      <div>
+        <div class="ot-det-h">
+          <div class="ttl">
+            <span x-text="detail.selectedOutage.outage && detail.selectedOutage.outage.type"></span> · <span x-text="formatTime(detail.selectedOutage.outage && detail.selectedOutage.outage.start_ts_ms)"></span>
+            <small x-text="formatDate(detail.selectedOutage.outage && detail.selectedOutage.outage.start_ts_ms)"></small>
+          </div>
+          <div class="stats">
+            <div class="s"><div class="v" x-text="formatDuration(detail.selectedOutage.outage && detail.selectedOutage.outage.duration_ms)"></div><div class="l">Dauer</div></div>
+            <div class="s"><div class="v" x-text="(detail.selectedOutage.outage && detail.selectedOutage.outage.lost_count) || 0"></div><div class="l">verlorene Pings</div></div>
+          </div>
+        </div>
+
+        <div class="ot-mini-chart">
+          <div class="ti"><span>Latenz-Kontext ±30 s</span></div>
+          <div class="chart-area-mini">
+            <canvas id="outage-context-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="ot-correlated">
+          <div class="ti">Korrelierte Events</div>
+          <template x-for="ev in (detail.selectedOutage.wifi_events || [])" :key="'w'+ev.id">
+            <div class="corr-row wifi">
+              <div x-text="'WLAN ' + ev.event_type"></div>
+              <div class="bar"></div>
+              <div class="pct" x-text="formatTime(ev.ts_ms)"></div>
+            </div>
+          </template>
+          <template x-for="ev in (detail.selectedOutage.stream_events || [])" :key="'s'+ev.id">
+            <div class="corr-row stream">
+              <div x-text="'Stream ' + ev.event_type"></div>
+              <div class="bar"></div>
+              <div class="pct" x-text="formatTime(ev.ts_ms)"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+    <template x-if="!detail.selectedOutage">
+      <div style="color:#6b7280;font-size:13px;text-align:center;padding:40px 0">Wählen Sie einen Aussetzer aus der Liste.</div>
+    </template>
+  </div>
+</div>

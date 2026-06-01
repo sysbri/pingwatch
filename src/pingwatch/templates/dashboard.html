@@ -1,0 +1,218 @@
+{# Dashboard screen — hero, stream, 4 cards, 3-panel bottom. #}
+
+{# Hero bar #}
+<div class="pw-hero">
+  <div class="left">
+    <div class="blob"></div>
+    <div class="text">
+      <div class="title" x-text="(dashboard.hero && dashboard.hero.uptime_pct != null) ? (dashboard.hero.uptime_pct.toFixed(2) + ' % Uptime heute') : 'PingWatch'"></div>
+      <div class="sub">Übersicht über alle überwachten Ziele · letzte 24 h</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat">
+      <div class="v" x-text="(dashboard.hero && dashboard.hero.outages_24h) || 0"></div>
+      <div class="l">Aussetzer 24h</div>
+    </div>
+    <div class="stat">
+      <div class="v" x-text="formatDuration(dashboard.hero && dashboard.hero.total_outage_ms)"></div>
+      <div class="l">Σ Ausfallzeit</div>
+    </div>
+    <div class="stat">
+      <div class="v" x-text="formatNumber(dashboard.hero && dashboard.hero.total_pings)"></div>
+      <div class="l">Pings 24h</div>
+    </div>
+  </div>
+</div>
+
+{# Stream panel #}
+<div class="pw-stream" @click="goto('detail', 'stream')">
+  <div class="stream-l">
+    <div class="title">Live-Stream <span class="live">LIVE</span></div>
+    <div class="big"><span x-text="(dashboard.stream && dashboard.stream.kbps_now) || '0'"></span><small> KB/s</small></div>
+    <div class="sub">
+      <b x-text="formatBytes(dashboard.stream && dashboard.stream.bytes_today)"></b> heute ·
+      Ziel: <b x-text="(settings['stream.endpoint'] || 'speed.cloudflare.com').replace(/^https?:\/\//,'').split('/')[0]"></b>
+    </div>
+  </div>
+  <div class="stream-chart">
+    <canvas id="stream-chart-canvas"></canvas>
+  </div>
+  <div class="stream-r">
+    <div class="r"><span class="lbl">Drops/h</span><span class="val amber" x-text="(dashboard.stream && dashboard.stream.drops_count) || 0"></span></div>
+    <div class="r"><span class="lbl">Längster Drop</span><span class="val" x-text="formatDuration(dashboard.stream && dashboard.stream.longest_drop_ms)"></span></div>
+    <div class="r"><span class="lbl">Reconnects</span><span class="val" x-text="(dashboard.stream && dashboard.stream.reconnects) || 0"></span></div>
+    <div class="r"><span class="lbl">Volumen</span><span class="val" x-text="formatBytes(dashboard.stream && dashboard.stream.bytes_today)"></span></div>
+  </div>
+  <div class="stream-r2" @click.stop>
+    <button type="button" class="pw-speedtest-btn"
+            :disabled="speedtest.status === 'running'"
+            @click.stop="runSpeedtest()"
+            x-text="speedtest.status === 'running' ? ('läuft… ' + speedtest.elapsed + 's') : 'Speedtest starten'"></button>
+    <div class="pw-speedtest-card" x-show="speedtest.last" x-cloak>
+      <div class="row"><span class="lbl">Down</span><span class="val"><span x-text="fmtMbps(speedtest.last && speedtest.last.down_mbps)"></span> Mbps</span></div>
+      <div class="row"><span class="lbl">Up</span><span class="val"><span x-text="fmtMbps(speedtest.last && speedtest.last.up_mbps)"></span> Mbps</span></div>
+      <div class="row"><span class="lbl">Latenz</span><span class="val"><span x-text="fmtMbps(speedtest.last && speedtest.last.latency_ms)"></span> ms</span></div>
+      <div class="row meta">
+        <span x-text="(speedtest.last && speedtest.last.server) || 'speed.cloudflare.com'"></span>
+        <span x-text="speedtest.last && speedtest.last.ts_ms ? fmtAgo(speedtest.last.ts_ms) : ''"></span>
+      </div>
+    </div>
+    <div class="pw-speedtest-err" x-show="speedtest.status === 'failed'" x-cloak x-text="speedtest.error || 'Fehler beim Speedtest'"></div>
+  </div>
+</div>
+
+{# 4 destination cards #}
+<div class="pw-cards">
+  <template x-for="card in (dashboard.cards || [])" :key="card.id">
+    <div class="pw-card" :class="{ flaky: card.status === 'flaky' }" @click="goto('detail', cardKey(card))">
+      <div class="ch">
+        <div>
+          <div class="nm" x-text="card.name"></div>
+          <div class="ad" x-text="card.address"></div>
+        </div>
+        <span class="badge" :class="card.status === 'flaky' ? 'warn' : 'ok'" x-text="card.status === 'flaky' ? 'FLAKY' : 'OK'"></span>
+      </div>
+      <div class="metrics-big">
+        <div class="m">
+          <div class="v" :class="card.status === 'flaky' ? 'amber' : 'green'">
+            <span x-text="formatLatency(card.kpi && card.kpi.mean_us)"></span><small> ms</small>
+          </div>
+          <div class="l">Latenz Ø</div>
+        </div>
+        <div class="m">
+          <div class="v" :class="(card.kpi && card.kpi.loss_pct >= 50) ? 'red' : ((card.kpi && card.kpi.loss_pct > 1) ? 'amber' : 'green')">
+            <span x-text="formatLossPct(card.kpi && card.kpi.loss_pct)"></span><small> %</small>
+          </div>
+          <div class="l">Loss</div>
+        </div>
+      </div>
+      <div class="metrics-mini">
+        <div class="mm"><span class="lbl">min</span><span class="val" x-text="formatLatency(card.kpi && card.kpi.min_us)"></span></div>
+        <div class="mm"><span class="lbl">max</span><span class="val" x-text="formatLatency(card.kpi && card.kpi.max_us)"></span></div>
+      </div>
+      <div class="pw-spark-label"><span>Latenz 60 min</span><span x-text="(card.outages_today && card.outages_today.length) + ' Aussetzer'"></span></div>
+      <div class="pw-spark">
+        <template x-for="(v, i) in (card.sparkline || [])" :key="i">
+          <span :style="{ height: sparkHeight(v, card.sparkline) }"></span>
+        </template>
+      </div>
+      <div class="pw-outlist">
+        <div class="head">
+          <span>Aussetzer heute</span>
+          <span class="ct" x-text="(card.outages_today && card.outages_today.length) || 0"></span>
+        </div>
+        <template x-if="!(card.outages_today && card.outages_today.length)">
+          <div class="empty">keine</div>
+        </template>
+        <template x-for="o in (card.outages_today || []).slice(0,3)" :key="o.id">
+          <div class="ev">
+            <span class="t" x-text="formatTime(o.start_ts_ms)"></span>
+            <span class="d" x-text="formatDuration(o.duration_ms || 0)"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+</div>
+
+{# 3-panel bottom #}
+<div class="pw-bottom">
+  <div class="pw-panel">
+    <div class="ph">
+      <div class="pt">24h Timeline</div>
+      <div class="pr">letzte 24 Stunden</div>
+    </div>
+    <div class="pb">
+      <div class="tl">
+        <template x-for="row in (dashboard.timeline || [])" :key="row.id">
+          <div class="tl-row" @click="goto('detail', cardKeyByName(row.name))">
+            <div class="nm" x-text="row.name"></div>
+            <div class="tl-bar">
+              <template x-for="(gap, i) in (row.gaps || [])" :key="i">
+                <span :class="gap.type === 'WLAN' ? 'gapw' : 'gap'" :style="gapStyle(gap)"></span>
+              </template>
+            </div>
+            <div class="pct" x-text="((row.gaps && row.gaps.length) || 0) + ' Gaps'"></div>
+          </div>
+        </template>
+      </div>
+      <div class="tl-axis">
+        <div></div>
+        <div class="tl-ticks"><span>-24h</span><span>-18h</span><span>-12h</span><span>-6h</span><span>jetzt</span></div>
+        <div></div>
+      </div>
+      <div class="tl-legend">
+        <div class="lg"><span class="sw" style="background:#10b981"></span>OK</div>
+        <div class="lg"><span class="sw" style="background:#ef4444"></span>Aussetzer</div>
+        <div class="lg"><span class="sw" style="background:#f59e0b"></span>WLAN</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pw-panel">
+    <div class="ph">
+      <div class="pt">Event-Log</div>
+      <div class="pr"><span class="live" style="font-size:9px;padding:2px 7px;border-radius:8px;background:rgba(16,185,129,0.15);color:#34d399;font-weight:600;">LIVE</span></div>
+    </div>
+    <div class="pb">
+      <div class="log">
+        <template x-for="ev in (dashboard.events || []).slice(0, 30)" :key="ev.source + '-' + ev.id">
+          <div class="row" :class="rowClass(ev)" @click="openEvent(ev)">
+            <div class="t" x-text="formatTime(ev.ts_ms)"></div>
+            <div><span class="pw-dot" :class="rowClass(ev)"></span></div>
+            <div class="nm" x-html="eventLabel(ev)"></div>
+            <div class="d" x-text="formatDuration(ev.duration_ms || 0)"></div>
+            <div class="tag" :class="tagClass(ev)" x-text="tagLabel(ev)"></div>
+          </div>
+        </template>
+        <template x-if="!(dashboard.events && dashboard.events.length)">
+          <div style="font-size:11px;color:#4b5563;font-style:italic;padding:10px 0;text-align:center">keine Events</div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <div class="pw-panel">
+    <div class="ph">
+      <div class="pt">Aktuelle Route</div>
+      <div class="pr" style="display:flex;align-items:center;gap:6px;">
+        <select class="pw-trace-pick" @change="setTraceDest($event.target.value)"
+                :value="settings['dashboard.trace_dest_id'] || 'auto'">
+          <option value="auto">Auto (schlechtestes Ziel)</option>
+          <template x-for="t in (targets || []).filter(x => x.kind !== 'gateway')" :key="t.id">
+            <option :value="t.id" x-text="t.name"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+    <div class="pb">
+      <template x-if="dashboard.worst_trace">
+        <div>
+          <div class="tr-head">
+            Trace zu <b x-text="destNameById(dashboard.worst_trace.dest_id)"></b> ·
+            <span x-text="(dashboard.worst_trace.hop_count || 0) + ' Hops'"></span> ·
+            <span x-text="dashboard.worst_trace.route_changed ? 'Routen-Wechsel' : 'stabil'"></span>
+          </div>
+          <div class="tr-hops">
+            <template x-for="hop in (dashboard.worst_trace.hops || [])" :key="hop.hop_no">
+              <div class="tr-hop" :class="hopClass(hop)">
+                <div class="n" x-text="hop.hop_no"></div>
+                <div class="h">
+                  <span x-text="hop.host || hop.ip || '*'"></span>
+                  <small x-text="hop.ip || ''"></small>
+                </div>
+                <div class="rtt" x-text="formatLatency(hop.rtt_us) + ' ms'"></div>
+                <div class="ls" x-text="(hop.loss_pct || 0).toFixed(1) + '%'"></div>
+                <div class="dt" x-text="hop.is_suspect ? '!' : ''"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+      <template x-if="!dashboard.worst_trace">
+        <div style="font-size:11px;color:#4b5563;font-style:italic;padding:20px 0;text-align:center">noch keine Traces erfasst</div>
+      </template>
+    </div>
+  </div>
+</div>

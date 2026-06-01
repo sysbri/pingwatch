@@ -1,0 +1,32 @@
+[Unit]
+Description=PingWatch Chromium Kiosk (cage + Wayland)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/wait-for-pingwatch
+ExecStart=/usr/bin/cage -s -- \
+  /usr/bin/chromium \
+    --kiosk \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-translate \
+    --disable-features=TranslateUI \
+    --no-first-run \
+    --start-maximized \
+    --check-for-update-interval=31536000 \
+    --password-store=basic \
+    --ozone-platform=wayland \
+    --enable-features=UseOzonePlatform \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --user-data-dir=%h/.cache/pingwatch-chromium \
+    --disk-cache-dir=%h/.cache/pingwatch-chromium-cache \
+    --disk-cache-size=20000000 \
+    --autoplay-policy=no-user-gesture-required \
+    http://127.0.0.1:5000/
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

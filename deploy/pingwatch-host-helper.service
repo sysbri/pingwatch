@@ -1,0 +1,15 @@
+[Unit]
+Description=PingWatch host-side action helper (reads /run/pingwatch-host.fifo)
+After=network.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'rm -f /run/pingwatch-host.fifo && mkfifo -m 0620 /run/pingwatch-host.fifo && chgrp 10001 /run/pingwatch-host.fifo'
+ExecStart=/usr/local/bin/pingwatch-host-helper.sh
+Restart=always
+RestartSec=2
+# Runs as root because the actions (reboot, factory_reset) need it.
+User=root
+
+[Install]
+WantedBy=multi-user.target
