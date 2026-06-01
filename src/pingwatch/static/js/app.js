@@ -811,8 +811,14 @@ function pingwatch() {
       return ((v / max) * 100).toFixed(0) + '%';
     },
     histBinHeight(c, all) {
-      const max = Math.max(...(all || []), 1);
-      return Math.max(2, Math.round((c / max) * 80)) + 'px';
+      // sqrt-Skala: ein dominanter Bucket (z.B. 282 Pings) druckt sonst alle
+      // anderen optisch komplett platt. sqrt zieht die kleinen Werte hoch
+      // ohne die Reihenfolge zu aendern.
+      const max = Math.sqrt(Math.max(...(all || []), 1));
+      const scaled = Math.sqrt(Math.max(0, c));
+      const pxMax = 80;
+      const px = c === 0 ? 1 : Math.max(3, Math.round((scaled / max) * pxMax));
+      return px + 'px';
     },
 
     showToast(text) {
