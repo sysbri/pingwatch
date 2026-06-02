@@ -1,0 +1,39 @@
+# Render Blueprint — öffentliche Vorschau-Instanz von PingWatch.
+#
+# NUR für UI-/Cloud-Preview gedacht: es laufen Dashboard, Internet-Pings,
+# Stream-/Speedtest und Charts. WLAN-Telemetrie, USB-Export, Pi-Metriken und
+# die Host-Aktionen (Reboot/Factory-Reset/Update) brauchen den echten
+# Raspberry Pi und bleiben hier leer bzw. ohne Funktion.
+#
+# Deploy (auch vom Handy möglich):
+#   1. https://dashboard.render.com  →  mit GitHub anmelden
+#   2. New +  →  Blueprint  →  dieses Repo (sysbri/pingwatch) wählen
+#   3. Render liest diese Datei  →  Apply  →  wartet auf den Build
+#   4. Öffentliche URL erscheint als  https://<name>.onrender.com
+#
+# Hinweis: Free-Instanzen schlafen nach ~15 min Inaktivität ein und brauchen
+# beim nächsten Aufruf ~30–60 s zum Aufwachen. Daten sind flüchtig (Reset bei
+# jedem Deploy). KEIN Login — wer die URL hat, sieht alles.
+
+services:
+  - type: web
+    name: pingwatch-preview
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: claude/optimistic-archimedes-tp6pa
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: PINGWATCH_BIND_HOST
+        value: "0.0.0.0"
+      # Render routet auf Port 10000 (Default des PORT-Env); App lauscht dort.
+      - key: PINGWATCH_BIND_PORT
+        value: "10000"
+      - key: PINGWATCH_DB
+        value: /data/pingwatch.db
+      - key: PINGWATCH_CONFIG
+        value: /data/config.yaml
+      - key: TZ
+        value: Europe/Berlin
