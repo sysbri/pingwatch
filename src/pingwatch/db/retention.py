@@ -1,10 +1,12 @@
 """Periodic retention purge for raw and aggregate tables.
 
-Every 10 minutes we walk each retained table, deleting rows older than
-the configured cutoff in 50k-row chunks with brief yields between chunks
-so we never block the event loop for long. After deletes we run
-``PRAGMA incremental_vacuum`` to actually shrink the file. A separate
-5-minute task runs ``PRAGMA wal_checkpoint(TRUNCATE)``.
+Every 10 minutes we delete rows older than the configured cutoff from each
+retained table, then run ``PRAGMA incremental_vacuum`` to shrink the file. A
+separate 5-minute task runs ``PRAGMA wal_checkpoint(TRUNCATE)``.
+
+Retention runs on its OWN database connection so its bulk DELETEs / VACUUM /
+checkpoint don't interleave with the shared connection's high-frequency writes
+(which previously surfaced as "database table is locked" on checkpoint).
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ from pingwatch.util import sleep_or_stop
 
 log = structlog.get_logger(__name__)
 
-CHUNK_SIZE = 50_000
 PURGE_INTERVAL_S = 600
 CHECKPOINT_INTERVAL_S = 300
 
@@ -85,37 +86,30 @@ class RetentionWorker:
         now_ms = int(time.time() * 1000)
         for table in _TABLES:
             days = await self._read_days(table.setting_key, table.default_days)
-            cutoff = self._cutoff_for(table, now_ms, days)
-            deleted_total = await self._delete_chunked(table.name, table.ts_column, cutoff)
-            if deleted_total:
-                log.info(
-                    "retention.deleted",
-                    table=table.name,
-                    rows=deleted_total,
-                    days=days,
-                )
+            cutoff = self._cutoff_for(now_ms, days)
+            deleted = await self._delete_expired(table.name, table.ts_column, cutoff)
+            if deleted:
+                log.info("retention.deleted", table=table.name, rows=deleted, days=days)
         try:
             await self._conn.execute("PRAGMA incremental_vacuum(2000)")
             await self._conn.commit()
         except Exception:  # noqa: BLE001
             log.exception("retention.vacuum_failed")
 
-    async def _delete_chunked(self, table: str, column: str, cutoff: int) -> int:
-        deleted_total = 0
-        while not self._stop.is_set():
-            cur = await self._conn.execute(
-                f"DELETE FROM {table} "  # noqa: S608  # internal constant identifier, not user input
-                f"WHERE rowid IN (SELECT rowid FROM {table} WHERE {column} < ? LIMIT ?)",
-                (cutoff, CHUNK_SIZE),
-            )
-            await self._conn.commit()
-            rows = cur.rowcount or 0
-            await cur.close()
-            deleted_total += rows
-            if rows < CHUNK_SIZE:
-                break
-            await asyncio.sleep(0)
-        return deleted_total
+    async def _delete_expired(self, table: str, column: str, cutoff: int) -> int:
+        # Delete directly by the timestamp column. This works for both rowid
+        # and WITHOUT ROWID tables — the previous rowid-subquery raised
+        # "no such column: rowid" on WITHOUT ROWID tables (hourly_aggregates,
+        # wifi_rssi_samples, ...). aiosqlite runs the statement off the event
+        # loop, so a single DELETE is fine without manual chunking.
+        cur = await self._conn.execute(
+            f"DELETE FROM {table} WHERE {column} < ?",  # noqa: S608  # internal constant identifiers
+            (cutoff,),
+        )
+        await self._conn.commit()
+        deleted = cur.rowcount or 0
+        await cur.close()
+        return deleted
 
     async def _read_days(self, key: str, default: int) -> int:
         try:
@@ -134,11 +128,10 @@ class RetentionWorker:
             return default
 
     @staticmethod
-    def _cutoff_for(table: _Table, now_ms: int, days: int) -> int:
-        if table.ts_column == "hour_bucket":
-            return (now_ms // 3_600_000) - days * 24
-        if table.ts_column == "day_bucket":
-            return (now_ms // DAY_MS) - days
+    def _cutoff_for(now_ms: int, days: int) -> int:
+        # Every retained timestamp column (ts_ms, and the hour_bucket/day_bucket
+        # aggregate keys) is stored in ms (see metrics._math.hour_bucket_ms), so
+        # a single ms cutoff is correct for all tables.
         return now_ms - days * DAY_MS
 
     async def _sleep_or_stop(self, seconds: float) -> None:
@@ -148,5 +141,16 @@ class RetentionWorker:
         self._stop.set()
 
 
-async def run_retention(conn) -> None:
-    await RetentionWorker(conn).run()
+async def run_retention(conn) -> None:  # noqa: ARG001  # retention opens its own connection
+    """Run retention on a dedicated connection (see module docstring)."""
+    from pingwatch.config import get_settings
+
+    settings = get_settings()
+    own = await aiosqlite.connect(str(settings.paths.db))
+    own.row_factory = aiosqlite.Row
+    await own.execute("PRAGMA busy_timeout = 5000")
+    await own.execute("PRAGMA foreign_keys = ON")
+    try:
+        await RetentionWorker(own).run()
+    finally:
+        await own.close()
