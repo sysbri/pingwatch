@@ -5,18 +5,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from pingwatch.api import host_fifo
 from pingwatch.api.deps import ConnDep
 
 router = APIRouter(prefix="/api/wifi", tags=["wifi"])
 
-_FIFO = "/run/pingwatch-host.fifo"
 _RESULT_DIR = Path("/run/pingwatch-shared")
 _SCAN_FILE = _RESULT_DIR / "wifi-scan.json"
 _STATUS_FILE = _RESULT_DIR / "wifi-status.json"
@@ -44,26 +43,14 @@ def _validate_password(pw: str) -> None:
             raise HTTPException(status_code=400, detail="password contains forbidden chars")
 
 
-def _write_fifo_sync(line: str) -> None:
-    # FIFO write is blocking until a reader is present; helper is always listening.
-    # Use os.open with O_WRONLY (no O_NONBLOCK so we block-wait if helper is busy).
-    fd = os.open(_FIFO, os.O_WRONLY)
-    try:
-        os.write(fd, line.encode("utf-8"))
-    finally:
-        os.close(fd)
-
-
 async def _write_fifo(line: str) -> None:
-    if not line.endswith("\n"):
-        line += "\n"
     try:
-        await asyncio.wait_for(asyncio.to_thread(_write_fifo_sync, line), timeout=3.0)
+        await host_fifo.write_command(line)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="host helper fifo missing") from exc
     except PermissionError as exc:
         raise HTTPException(status_code=503, detail="host helper fifo not writable") from exc
-    except TimeoutError as exc:
+    except (TimeoutError, OSError) as exc:
         raise HTTPException(status_code=503, detail="host helper not responding") from exc
 
 

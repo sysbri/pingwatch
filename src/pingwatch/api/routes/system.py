@@ -14,14 +14,13 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from pingwatch.api import _queries_compat as q
+from pingwatch.api import host_fifo
 from pingwatch.api.deps import ConnDep
 from pingwatch.api.schemas import OkResponse, SystemMetrics
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
-
-HOST_FIFO = Path("/run/pingwatch-host.fifo")
 
 
 def _read_cpu_pct() -> float:
@@ -139,15 +138,14 @@ async def diagnose_bundle(conn: ConnDep) -> StreamingResponse:
     )
 
 
-def _write_host_command(cmd: str) -> bool:
-    if not HOST_FIFO.exists():
-        log.warning("host-fifo-missing", path=str(HOST_FIFO), cmd=cmd)
-        return False
+async def _write_host_command(cmd: str) -> bool:
     try:
-        with open(HOST_FIFO, "w") as fh:
-            fh.write(cmd + "\n")
+        await host_fifo.write_command(cmd)
         return True
-    except OSError as exc:
+    except FileNotFoundError:
+        log.warning("host-fifo-missing", cmd=cmd)
+        return False
+    except (PermissionError, TimeoutError, OSError) as exc:
         log.warning("host-fifo-write-failed", error=str(exc))
         return False
 
@@ -157,7 +155,7 @@ async def restart_system() -> OkResponse:
     # The host helper (deploy/pingwatch-host-helper.sh) expects the verb
     # `reboot` for a full pi reboot. Use `restart_app` to only bounce the
     # container — exposed via /api/system/restart-app if needed.
-    ok = _write_host_command("reboot")
+    ok = await _write_host_command("reboot")
     return OkResponse(ok=ok, detail="restart triggered" if ok else "fifo unavailable")
 
 
@@ -173,7 +171,7 @@ async def factory_reset(
     await q.factory_reset(conn)
     # The helper does its own `docker compose down -v` + reboot; we just
     # need to trigger the `factory_reset` verb.
-    _write_host_command("factory_reset")
+    await _write_host_command("factory_reset")
     return OkResponse(ok=True, detail="factory reset complete")
 
 
