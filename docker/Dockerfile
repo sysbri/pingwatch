@@ -8,8 +8,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-        iw iproute2 mtr-tiny traceroute iperf3 ca-certificates tzdata zip tini curl \
+        iw iproute2 mtr-tiny traceroute iperf3 ca-certificates tzdata zip tini curl libcap2-bin \
  && rm -rf /var/lib/apt/lists/*
+
+# Traceroute: mtr spawns mtr-packet, which needs CAP_NET_RAW. The container runs
+# non-root with cap_drop=ALL + cap_add=NET_RAW; this file capability lets the
+# unprivileged user actually use NET_RAW (kept in the bounding set by cap_add).
+RUN setcap cap_net_raw+ep "$(command -v mtr-packet)"
 
 RUN groupadd --system --gid 10001 pingwatch \
  && useradd  --system --uid 10001 --gid 10001 --home /app --shell /usr/sbin/nologin pingwatch
