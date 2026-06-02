@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
-import time
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -12,7 +11,6 @@ import structlog
 
 from ..bus import Bus, get_bus
 from ..db import queries as q
-from ..metrics._math import hour_bucket_ms as _hour_bucket_ms_fn
 from ..metrics._math import percentile as _percentile_fn
 from ..models import FLAG_SPIKE, PingSample
 
@@ -232,14 +230,6 @@ class MetricsAggregator:
         for dest_id in ids:
             out[dest_id] = await self.snapshot(dest_id)
         return out
-
-
-def _hour_bucket_ms(ts_ms: int) -> int:
-    return _hour_bucket_ms_fn(ts_ms)
-
-
-def now_ms() -> int:
-    return int(time.time() * 1000)
 
 
 async def run_aggregator(conn, bus, agg: MetricsAggregator | None = None) -> None:

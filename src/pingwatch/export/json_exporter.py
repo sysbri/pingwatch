@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 
 import aiosqlite
 
@@ -32,28 +31,6 @@ async def export_destinations_json(
     rows = await cur.fetchall()
     payload = {"destinations": _rows_to_dicts([list(r) for r in rows], cols)}
     return json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
-
-
-async def export_pings_json(
-    conn: aiosqlite.Connection, dest_id: int, since_ms: int, until_ms: int
-) -> AsyncIterator[bytes]:
-    """Streaming JSON array — chunked to keep memory bounded."""
-    yield b'{"dest_id": ' + str(dest_id).encode() + b', "pings": ['
-    cols = [
-        "id", "dest_id", "ts_ms", "success", "latency_us", "ttl", "sequence", "error_kind", "flags",
-    ]
-    cur = await conn.execute(
-        f"SELECT {','.join(cols)} FROM raw_pings "  # noqa: S608  # internal constant identifier, not user input
-        "WHERE dest_id=? AND ts_ms BETWEEN ? AND ? ORDER BY ts_ms",
-        (dest_id, since_ms, until_ms),
-    )
-    first = True
-    async for row in cur:
-        prefix = b"" if first else b","
-        first = False
-        obj = dict(zip(cols, list(row), strict=True))
-        yield prefix + json.dumps(obj, ensure_ascii=False).encode("utf-8")
-    yield b"]}"
 
 
 async def export_outages_json(

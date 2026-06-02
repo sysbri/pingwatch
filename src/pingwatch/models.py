@@ -48,14 +48,12 @@ class StreamEventType(StrEnum):
     CONNECT = "connect"
     RECONNECT = "reconnect"
     DROP = "drop"
-    THROUGHPUT_LOW = "throughput_low"
     THROUGHPUT_RECOVER = "throughput_recover"
 
 
 class HeartbeatEventType(StrEnum):
     LOSS = "loss"
     RECOVER = "recover"
-    DRIFT = "drift"
 
 
 # Bit flags for raw_pings.flags

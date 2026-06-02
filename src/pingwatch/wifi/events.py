@@ -1,9 +1,7 @@
 """Pure helper functions for WiFi state-machine transitions.
 
 The monitor passes successive ``WifiSnapshot`` values to :func:`diff_snapshots`
-which returns a list of ``WifiEvent`` describing the transition. ``classify_gap``
-distinguishes a brief reassoc (short disassoc followed by quick reassociation)
-from a real disconnect using a configurable minimum-duration threshold.
+which returns a list of ``WifiEvent`` describing the transition.
 """
 
 from __future__ import annotations
@@ -94,30 +92,3 @@ def diff_snapshots(prev: WifiSnapshot | None, cur: WifiSnapshot) -> list[WifiEve
     return events
 
 
-def classify_gap(
-    disconnect_ts_ms: int,
-    reconnect_ts_ms: int,
-    reassoc_min_duration_ms: int,
-) -> WifiEvent:
-    """Decide if a disassoc->assoc round-trip is a reassoc or a full disconnect.
-
-    Caller passes the ts of the original disconnect and the subsequent connect.
-    Returns a single :class:`WifiEvent` describing the round-trip. Duration is
-    always populated.
-    """
-    duration_ms = max(0, reconnect_ts_ms - disconnect_ts_ms)
-    if duration_ms < reassoc_min_duration_ms:
-        return WifiEvent(
-            ts_ms=reconnect_ts_ms,
-            event_type=WifiEventType.REASSOC,
-            duration_ms=duration_ms,
-        )
-    return WifiEvent(
-        ts_ms=reconnect_ts_ms,
-        event_type=WifiEventType.DISCONNECT,
-        duration_ms=duration_ms,
-    )
-
-
-def is_reassoc(duration_ms: int, reassoc_min_duration_ms: int) -> bool:
-    return duration_ms >= reassoc_min_duration_ms
