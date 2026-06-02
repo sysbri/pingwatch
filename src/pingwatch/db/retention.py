@@ -41,7 +41,7 @@ _TABLES: tuple[_Table, ...] = (
     _Table("outages", "start_ts_ms", "retention.outages_days", 180),
     _Table("traceroutes", "ts_ms", "retention.traces_days", 30),
     _Table("wifi_rssi_samples", "ts_ms", "retention.wifi_rssi_days", 7),
-    _Table("wifi_events", "ts_ms", "retention.wifi_rssi_days", 180),
+    _Table("wifi_events", "ts_ms", "retention.wifi_events_days", 180),
     _Table("stream_throughput_samples", "ts_ms", "retention.stream_samples_days", 7),
     _Table("stream_events", "ts_ms", "retention.stream_samples_days", 180),
     _Table("heartbeat_events", "ts_ms", "retention.heartbeat_days", 30),

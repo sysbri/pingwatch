@@ -120,7 +120,12 @@ async def _spawn_worker(
 
 
 async def serve() -> None:
-    structlog.configure(processors=[structlog.processors.JSONRenderer()])
+    structlog.configure(
+        processors=[
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ]
+    )
     settings = get_settings()
     bus = get_bus()
     db = DB(settings.paths.db)

@@ -97,7 +97,8 @@ async def patch_target(target_id: int, body: TargetPatch, conn: ConnDep) -> Targ
     if address_changed:
         await bus.publish("targets.address_changed", {"dest_id": target_id})
     row = await q.get_destination(conn, target_id)
-    assert row is not None  # noqa: S101
+    if row is None:
+        raise HTTPException(status_code=500, detail="target lost after update")
     return _to_out(row)
 
 
