@@ -23,6 +23,8 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     wifi = await q.wifi_current(conn)
 
     destinations = await q.list_destinations(conn)
+    # Nur enabled-Ziele auf dem Dashboard (User-Toggle in Settings -> Ziele).
+    destinations = [d for d in destinations if d.get("enabled")]
     cards: list[dict[str, Any]] = []
     for dest in destinations:
         kpi = await q.dest_kpis(conn, dest["id"], since_ms=day_start_ms)

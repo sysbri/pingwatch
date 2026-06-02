@@ -258,7 +258,10 @@ function pingwatch() {
     _renderLatencyChart() {
       const lc = document.getElementById('detail-latency-canvas');
       if (!lc || !window.PingWatchCharts || !this.detail.overview) return;
-      try { this._latChart && this._latChart.destroy && this._latChart.destroy(); } catch (e) { /* */ }
+      try {
+        if (this._latChart && this._latChart.destroy) this._latChart.destroy();
+      } catch (e) { /* */ }
+      this._latChart = null;
       const init = () => {
         this._latChart = window.PingWatchCharts.latencyChart(
           lc,

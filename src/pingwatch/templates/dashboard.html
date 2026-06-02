@@ -72,8 +72,54 @@
   </div>
 </div>
 
-{# 4 destination cards #}
+{# destination cards + WLAN-adapter card #}
 <div class="pw-cards">
+  <template x-if="dashboard.wifi_card">
+    <div class="pw-card" :class="{ flaky: dashboard.wifi_card.status === 'flaky', down: dashboard.wifi_card.status === 'down' }" @click="goto('detail', 'wifi')">
+      <div class="ch">
+        <div>
+          <div class="nm">WLAN-Adapter</div>
+          <div class="ad" x-text="dashboard.wifi_card.address || '—'"></div>
+        </div>
+        <span class="badge" :class="dashboard.wifi_card.status === 'ok' ? 'ok' : 'warn'" x-text="dashboard.wifi_card.status === 'ok' ? 'OK' : (dashboard.wifi_card.status === 'down' ? 'WEG' : 'FLAKY')"></span>
+      </div>
+      <div class="metrics-big">
+        <div class="m">
+          <div class="v" :class="(dashboard.wifi_card.signal_pct || 0) >= 70 ? 'green' : ((dashboard.wifi_card.signal_pct || 0) >= 40 ? 'amber' : 'red')">
+            <span x-text="(dashboard.wifi_card.signal_pct != null ? dashboard.wifi_card.signal_pct : '–')"></span><small> %</small>
+          </div>
+          <div class="l">Signal</div>
+        </div>
+        <div class="m">
+          <div class="v">
+            <span x-text="(dashboard.wifi_card.bitrate_mbps != null ? Math.round(dashboard.wifi_card.bitrate_mbps) : '–')"></span><small> Mbit/s</small>
+          </div>
+          <div class="l">Bitrate</div>
+        </div>
+      </div>
+      <div class="metrics-mini">
+        <div class="mm"><span class="lbl">RSSI</span><span class="val" x-text="(dashboard.wifi_card.rssi_dbm != null ? dashboard.wifi_card.rssi_dbm + ' dBm' : '–')"></span></div>
+        <div class="mm"><span class="lbl">Freq</span><span class="val" x-text="(dashboard.wifi_card.freq_mhz ? (dashboard.wifi_card.freq_mhz >= 5000 ? '5 GHz' : '2.4 GHz') : '–')"></span></div>
+      </div>
+      <div class="pw-spark-label"><span>Adapter-Events</span><span x-text="((dashboard.wifi_card.events_today || []).length) + ' heute'"></span></div>
+      <div class="pw-spark"></div>
+      <div class="pw-outlist">
+        <div class="head">
+          <span>Disconnects heute</span>
+          <span class="ct" x-text="(dashboard.wifi_card.events_today || []).length"></span>
+        </div>
+        <template x-if="!(dashboard.wifi_card.events_today && dashboard.wifi_card.events_today.length)">
+          <div class="empty">keine</div>
+        </template>
+        <template x-for="ev in (dashboard.wifi_card.events_today || []).slice(0,3)" :key="ev.id">
+          <div class="ev">
+            <span class="t" x-text="formatTime(ev.ts_ms)"></span>
+            <span class="d" x-text="ev.event_type"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
   <template x-for="card in (dashboard.cards || [])" :key="card.id">
     <div class="pw-card" :class="{ flaky: card.status === 'flaky' }" @click="goto('detail', cardKey(card))">
       <div class="ch">

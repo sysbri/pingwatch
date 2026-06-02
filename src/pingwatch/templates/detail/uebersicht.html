@@ -15,9 +15,9 @@
     <div class="chart-head">
       <div class="pt">Latenz · 24 h</div>
       <div class="range">
-        <button :class="{ active: detail.range === '1h' }" @click="setRange('1h')">1h</button>
-        <button :class="{ active: detail.range === '24h' }" @click="setRange('24h')">24h</button>
-        <button :class="{ active: detail.range === '7d' }" @click="setRange('7d')">7d</button>
+        <button type="button" :class="{ active: detail.range === '1h' }" @click.prevent="setRange('1h')">1h</button>
+        <button type="button" :class="{ active: detail.range === '24h' }" @click.prevent="setRange('24h')">24h</button>
+        <button type="button" :class="{ active: detail.range === '7d' }" @click.prevent="setRange('7d')">7d</button>
       </div>
     </div>
     <div class="chart-area">

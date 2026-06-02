@@ -35,7 +35,7 @@ class StreamConfig:
     endpoint: str = "https://speed.cloudflare.com/__down?bytes=99999999"
     target_kbps: int = 20
     daily_cap_mb: int = 2048
-    zero_kbps_min_samples: int = 1
+    zero_kbps_min_samples: int = 3
     timezone: str = "Europe/Berlin"
     chunk_size: int = 4096
     backoff_initial_s: float = 1.0
