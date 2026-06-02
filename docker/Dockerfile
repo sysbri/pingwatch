@@ -30,4 +30,7 @@ USER pingwatch
 EXPOSE 5000
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
-CMD ["uvicorn", "pingwatch.api.app:app", "--host", "127.0.0.1", "--port", "5000", "--app-dir", "/app/src", "--workers", "1", "--loop", "uvloop"]
+# Runs the full orchestrator (asyncio.TaskGroup with probes, persister,
+# stream, heartbeat, wifi-monitor, aggregator, trace-scheduler, outage-detector
+# + uvicorn). Uvicorn standalone (bypassing main.serve) would skip all workers.
+CMD ["python", "-m", "pingwatch.main"]

@@ -160,11 +160,50 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
         min((c["kpi"].get("loss_pct") or 0) for c in external_cards)
         if external_cards else None
     )
+    # WLAN-Adapter-Card mit ssid/rssi/signal/bitrate/freq + events heute.
+    # Daten primaer aus dem live wifi-status.json (gleicher Pfad wie pills oben).
+    wifi_card_data = {
+        "id": "wifi",
+        "name": "WLAN-Adapter",
+        "address": (wifi_ssid or "—"),
+        "type": "WIFI",
+        "kind": "wifi",
+        "rssi_dbm": wifi_rssi,
+        "signal_pct": None,
+        "bitrate_mbps": None,
+        "freq_mhz": None,
+        "channel": None,
+        "status": "ok" if wifi_ok else "down",
+    }
+    # Live-File parsen fuer Bitrate/Freq (falls vorhanden)
+    try:
+        _f2 = "/run/pingwatch-shared/wifi-status.json"
+        if _os.path.exists(_f2):
+            with open(_f2) as _fh2:
+                _live2 = _json.load(_fh2)
+            wifi_card_data["bitrate_mbps"] = _live2.get("bitrate_mbps")
+            wifi_card_data["freq_mhz"] = _live2.get("freq")
+            wifi_card_data["signal_pct"] = _live2.get("signal_pct")
+    except (OSError, ValueError):
+        pass
+    # WLAN-Events heute (disconnect/reassoc)
+    wev_cur = await conn.execute(
+        "SELECT id, ts_ms, event_type, duration_ms FROM wifi_events "
+        "WHERE event_type IN ('disconnect','reassoc') AND ts_ms >= ? "
+        "ORDER BY ts_ms DESC LIMIT 5",
+        (day_start_ms,),
+    )
+    wifi_card_data["events_today"] = [dict(r) for r in await wev_cur.fetchall()]
+    # Aussetzer-Status: rot wenn >0 disconnects/reassocs in 24h
+    if wifi_card_data["events_today"]:
+        wifi_card_data["status"] = "flaky"
+
     return {
         "ts_ms": now_ms,
         "hero": hero,
         "stream": stream,
         "wifi": wifi,
+        "wifi_card": wifi_card_data,
         "cards": cards,
         "timeline": timeline,
         "events": events,
