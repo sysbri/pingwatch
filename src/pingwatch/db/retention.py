@@ -1,12 +1,16 @@
 """Periodic retention purge for raw and aggregate tables.
 
 Every 10 minutes we delete rows older than the configured cutoff from each
-retained table, then run ``PRAGMA incremental_vacuum`` to shrink the file. A
-separate 5-minute task runs ``PRAGMA wal_checkpoint(TRUNCATE)``.
+retained table, then run ``PRAGMA incremental_vacuum`` to shrink the file.
 
-Retention runs on its OWN database connection so its bulk DELETEs / VACUUM /
-checkpoint don't interleave with the shared connection's high-frequency writes
-(which previously surfaced as "database table is locked" on checkpoint).
+Retention runs on its OWN database connection so its bulk DELETEs / VACUUM
+don't interleave with the shared connection's high-frequency writes
+(``busy_timeout`` lets a write wait its turn).
+
+We deliberately do NOT issue an explicit ``wal_checkpoint``: connections are
+opened with ``wal_autocheckpoint = 4000`` (see db/connection.py), so SQLite
+checkpoints the WAL automatically and keeps it bounded. An explicit checkpoint
+here only ever raised SQLITE_LOCKED ("database table is locked").
 """
 
 from __future__ import annotations
@@ -23,7 +27,6 @@ from pingwatch.util import sleep_or_stop
 log = structlog.get_logger(__name__)
 
 PURGE_INTERVAL_S = 600
-CHECKPOINT_INTERVAL_S = 300
 
 DAY_MS = 86_400_000
 
@@ -58,12 +61,10 @@ class RetentionWorker:
 
     async def run(self) -> None:
         purge_task = asyncio.create_task(self._purge_loop())
-        ckpt_task = asyncio.create_task(self._checkpoint_loop())
         try:
             await self._stop.wait()
         finally:
             purge_task.cancel()
-            ckpt_task.cancel()
 
     async def _purge_loop(self) -> None:
         while not self._stop.is_set():
@@ -72,15 +73,6 @@ class RetentionWorker:
             except Exception:  # noqa: BLE001
                 log.exception("retention.purge_failed")
             await self._sleep_or_stop(PURGE_INTERVAL_S)
-
-    async def _checkpoint_loop(self) -> None:
-        while not self._stop.is_set():
-            try:
-                await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                await self._conn.commit()
-            except Exception:  # noqa: BLE001
-                log.exception("retention.checkpoint_failed")
-            await self._sleep_or_stop(CHECKPOINT_INTERVAL_S)
 
     async def purge_once(self) -> None:
         now_ms = int(time.time() * 1000)
@@ -97,11 +89,10 @@ class RetentionWorker:
             log.exception("retention.vacuum_failed")
 
     async def _delete_expired(self, table: str, column: str, cutoff: int) -> int:
-        # Delete directly by the timestamp column. This works for both rowid
-        # and WITHOUT ROWID tables — the previous rowid-subquery raised
-        # "no such column: rowid" on WITHOUT ROWID tables (hourly_aggregates,
-        # wifi_rssi_samples, ...). aiosqlite runs the statement off the event
-        # loop, so a single DELETE is fine without manual chunking.
+        # Delete directly by the timestamp column. Works for both rowid and
+        # WITHOUT ROWID tables (the previous rowid-subquery raised
+        # "no such column: rowid" on WITHOUT ROWID tables). aiosqlite runs the
+        # statement off the event loop, so a single DELETE is fine.
         cur = await self._conn.execute(
             f"DELETE FROM {table} WHERE {column} < ?",  # noqa: S608  # internal constant identifiers
             (cutoff,),
