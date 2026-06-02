@@ -1,19 +1,24 @@
 """Persistent throttled HTTP download used as a "live traffic" canary.
 
-Pulls from a Cloudflare endpoint (or any configured URL), throttling chunk
-consumption with sleep-based pacing so the long-term throughput hovers
-around ``stream.target_kbps`` (default 20 KB/s). Every 1 s of wall-clock
+Pulls from a configured URL (default: a German Hetzner speed-test file),
+throttling chunk consumption with sleep-based pacing so the long-term throughput
+hovers around ``stream.target_kbps`` (default 20 KB/s). Every 1 s of wall-clock
 time we publish a throughput sample on the bus and persist it. A run of
-``stream.zero_kbps_min_samples`` consecutive zero-kbps samples is treated
-as a stream drop -- a STREAM outage is opened and a DROP event recorded.
+``stream.zero_kbps_min_samples`` consecutive zero-kbps samples is treated as a
+stream drop -- a STREAM outage is opened and a DROP event recorded.
 
-The worker stops cleanly at midnight local time when the daily download
-budget (``stream.daily_cap_mb``) is exhausted; it resumes the next day.
+Stream settings (endpoint / target_kbps / daily_cap_mb) are read from the DB and
+hot-reloaded on ``config.changed``: saving a new endpoint in the UI applies it
+live via a brief reconnect -- no container restart needed.
+
+The worker stops cleanly at midnight local time when the daily download budget
+(``stream.daily_cap_mb``) is exhausted; it resumes the next day.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import time
 import zoneinfo
@@ -33,7 +38,7 @@ log = structlog.get_logger(__name__)
 
 @dataclass(slots=True)
 class StreamConfig:
-    endpoint: str = "https://speed.cloudflare.com/__down?bytes=99999999"
+    endpoint: str = "https://speed.hetzner.de/10GB.bin"
     target_kbps: int = 20
     daily_cap_mb: int = 2048
     zero_kbps_min_samples: int = 3
@@ -67,29 +72,64 @@ class HttpTrickleWorker:
         self._bus = bus or get_bus()
         self._cfg = config or StreamConfig()
         self._stop = asyncio.Event()
+        self._reload = asyncio.Event()
         self._was_connected: bool = False
         self._last_disconnect_ts_ms: int | None = None
 
+    async def _refresh_settings(self) -> None:
+        self._cfg.endpoint = await queries.get_setting_typed(
+            self._conn, "stream.endpoint", self._cfg.endpoint
+        )
+        self._cfg.target_kbps = await queries.get_setting_typed(
+            self._conn, "stream.target_kbps", self._cfg.target_kbps
+        )
+        self._cfg.daily_cap_mb = await queries.get_setting_typed(
+            self._conn, "stream.daily_cap_mb", self._cfg.daily_cap_mb
+        )
+        self._cfg.zero_kbps_min_samples = await queries.get_setting_typed(
+            self._conn, "stream.zero_kbps_min_samples", self._cfg.zero_kbps_min_samples
+        )
+
+    async def _watch_config(self) -> None:
+        async with self._bus.subscribe("config.changed") as queue:
+            while not self._stop.is_set():
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except TimeoutError:
+                    continue
+                key = msg.get("key", "") if isinstance(msg, dict) else ""
+                if key.startswith("stream."):
+                    await self._refresh_settings()
+                    self._reload.set()  # signal the stream loop to reconnect
+                    log.info("stream.config_reloaded", endpoint=self._cfg.endpoint)
+
     async def run(self) -> None:
-        backoff = self._cfg.backoff_initial_s
-        while not self._stop.is_set():
-            if await self._budget_exceeded():
-                wait_s = self._seconds_until_midnight()
-                log.info("stream.budget_reached", wait_s=wait_s)
-                await self._sleep_or_stop(wait_s)
-                continue
-            try:
-                await self._stream_once()
-                backoff = self._cfg.backoff_initial_s
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                log.warning("stream.error", error=str(exc))
-                self._was_connected = False
-                self._last_disconnect_ts_ms = int(time.time() * 1000)
-                await self._emit_drop(reason=str(exc))
-                await self._sleep_or_stop(backoff)
-                backoff = min(self._cfg.backoff_max_s, backoff * 2)
+        await self._refresh_settings()
+        watcher = asyncio.create_task(self._watch_config())
+        try:
+            backoff = self._cfg.backoff_initial_s
+            while not self._stop.is_set():
+                if await self._budget_exceeded():
+                    wait_s = self._seconds_until_midnight()
+                    log.info("stream.budget_reached", wait_s=wait_s)
+                    await self._sleep_or_stop(wait_s)
+                    continue
+                try:
+                    await self._stream_once()
+                    backoff = self._cfg.backoff_initial_s
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("stream.error", error=str(exc))
+                    self._was_connected = False
+                    self._last_disconnect_ts_ms = int(time.time() * 1000)
+                    await self._emit_drop(reason=str(exc))
+                    await self._sleep_or_stop(backoff)
+                    backoff = min(self._cfg.backoff_max_s, backoff * 2)
+        finally:
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
 
     async def _stream_once(self) -> None:
         cfg = self._cfg
@@ -112,6 +152,11 @@ class HttpTrickleWorker:
                 self._was_connected = True
             async for piece in response.aiter_bytes(chunk_size=chunk):
                 if self._stop.is_set():
+                    return
+                if self._reload.is_set():
+                    # A stream.* setting changed -> reconnect with the new config.
+                    self._reload.clear()
+                    self._was_connected = False
                     return
                 if trickle_should_pause():
                     await asyncio.sleep(0.5)
@@ -242,17 +287,7 @@ class HttpTrickleWorker:
 
 
 async def run_http_trickle(conn, bus) -> None:
-    """Worker entry point. Builds StreamConfig from DB settings so the UI
-    can edit endpoint / target_kbps / daily_cap_mb at runtime."""
-    from pingwatch.db import queries
-
-    cfg = StreamConfig()
-    cfg.endpoint = await queries.get_setting_typed(conn, "stream.endpoint", cfg.endpoint)
-    cfg.target_kbps = await queries.get_setting_typed(conn, "stream.target_kbps", cfg.target_kbps)
-    cfg.daily_cap_mb = await queries.get_setting_typed(
-        conn, "stream.daily_cap_mb", cfg.daily_cap_mb,
-    )
-    cfg.zero_kbps_min_samples = await queries.get_setting_typed(
-        conn, "stream.zero_kbps_min_samples", cfg.zero_kbps_min_samples
-    )
-    await HttpTrickleWorker(conn, bus, cfg).run()
+    """Worker entry point. Stream settings are read from the DB and hot-reloaded
+    on config.changed, so the UI's Save applies a new endpoint live (brief
+    reconnect)."""
+    await HttpTrickleWorker(conn, bus).run()
