@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import random
-import time
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -11,6 +11,7 @@ import structlog
 
 from ..bus import Bus, get_bus
 from ..db import queries as q
+from ..metrics._math import percentile as _percentile_fn
 from ..models import FLAG_SPIKE, PingSample
 
 log = structlog.get_logger(__name__)
@@ -24,16 +25,7 @@ _LOSS_24H_WINDOW_MS = _RESERVOIR_WINDOW_MS
 
 
 def _percentile(sorted_vals: list[int], pct: float) -> int | None:
-    if not sorted_vals:
-        return None
-    if len(sorted_vals) == 1:
-        return sorted_vals[0]
-    k = (len(sorted_vals) - 1) * pct
-    f = int(k)
-    c = min(f + 1, len(sorted_vals) - 1)
-    if f == c:
-        return sorted_vals[f]
-    return int(sorted_vals[f] + (sorted_vals[c] - sorted_vals[f]) * (k - f))
+    return _percentile_fn(sorted_vals, pct)
 
 
 @dataclass(slots=True)
@@ -92,10 +84,8 @@ class MetricsAggregator:
         self._stop.set()
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
                 await self._task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
 
     async def _refresh_settings(self) -> None:
         self._spike_abs_us = await q.get_setting_typed(
@@ -110,7 +100,7 @@ class MetricsAggregator:
             while not self._stop.is_set():
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 key = msg.get("key", "") if isinstance(msg, dict) else ""
                 if key.startswith("spike.") or key.startswith("flaky."):
@@ -121,7 +111,7 @@ class MetricsAggregator:
             while not self._stop.is_set():
                 try:
                     sample = await asyncio.wait_for(queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 if isinstance(sample, PingSample):
                     await self.ingest(sample)
@@ -158,7 +148,7 @@ class MetricsAggregator:
             if len(st.reservoir) < _RESERVOIR_SIZE_24H:
                 st.reservoir.append((sample.ts_ms, sample.latency_us))
             else:
-                j = random.randint(0, st.reservoir_counter - 1)
+                j = random.randint(0, st.reservoir_counter - 1)  # noqa: S311  # non-cryptographic jitter/sampling
                 if j < _RESERVOIR_SIZE_24H:
                     st.reservoir[j] = (sample.ts_ms, sample.latency_us)
             # Drop expired entries lazily
@@ -242,16 +232,8 @@ class MetricsAggregator:
         return out
 
 
-def _hour_bucket_ms(ts_ms: int) -> int:
-    return (ts_ms // 3_600_000) * 3_600_000
-
-
-def now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-async def run_aggregator(conn, bus) -> None:
-    agg = MetricsAggregator(conn, bus)
+async def run_aggregator(conn, bus, agg: MetricsAggregator | None = None) -> None:
+    agg = agg or MetricsAggregator(conn, bus)
     await agg.start()
     try:
         await asyncio.Event().wait()

@@ -6,8 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
-from pingwatch.api import _queries_compat as q
 from pingwatch.api.deps import ConnDep
+from pingwatch.db import queries as q
 
 router = APIRouter(prefix="/api/outages", tags=["outages"])
 

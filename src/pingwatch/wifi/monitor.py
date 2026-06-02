@@ -236,7 +236,7 @@ class WifiMonitor:
         )
 
     async def _iw_event_loop(self) -> None:
-        cmd = f"iw event -f -t"
+        cmd = "iw event -f -t"
         while not self._stop.is_set():
             try:
                 proc = await asyncio.create_subprocess_exec(

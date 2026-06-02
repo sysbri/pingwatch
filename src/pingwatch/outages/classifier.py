@@ -76,7 +76,8 @@ async def tag_from_wifi_event(
     slack_ms: int = WLAN_SLACK_MS,
 ) -> list[int]:
     """When a wifi event arrives, re-check any outage overlapping ±slack."""
-    if event.event_type == WifiEventType.REASSOC and (event.duration_ms or 0) < reassoc_min_duration_ms:
+    if (event.event_type == WifiEventType.REASSOC
+            and (event.duration_ms or 0) < reassoc_min_duration_ms):
         return []
     if event.event_type not in (WifiEventType.DISCONNECT, WifiEventType.REASSOC):
         return []
@@ -103,7 +104,9 @@ def _within(ts: int, lo: int, hi: int) -> bool:
     return lo <= ts <= hi
 
 
-async def _wifi_events_between(conn: object, start_ts_ms: int, end_ts_ms: int) -> list[dict[str, object]]:
+async def _wifi_events_between(
+    conn: object, start_ts_ms: int, end_ts_ms: int
+) -> list[dict[str, object]]:
     cur = await conn.execute(  # type: ignore[attr-defined]
         "SELECT id, ts_ms, event_type, duration_ms, ssid, bssid FROM wifi_events "
         "WHERE ts_ms >= ? AND ts_ms <= ? ORDER BY ts_ms ASC",

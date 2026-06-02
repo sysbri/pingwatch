@@ -1,0 +1,45 @@
+# Fly.io Deploy — öffentliche Vorschau-Instanz von PingWatch.
+#
+# NUR für UI-/Cloud-Preview gedacht (wie render.yaml): Dashboard + Internet-
+# Pings + Stream-/Speedtest laufen; WLAN/USB/Pi-Hardware nicht.
+#
+# Deploy (CLI, vom Rechner):
+#   flyctl auth login
+#   flyctl apps create pingwatch-preview-<dein-suffix>   # Name muss global eindeutig sein
+#   flyctl deploy -a pingwatch-preview-<dein-suffix>
+#   flyctl open                                          # öffnet https://<app>.fly.dev
+#
+# /data ist hier flüchtig (kein Volume) — die DB wird bei jedem Deploy neu
+# angelegt. Für eine Preview gewollt. KEIN Login.
+
+app = "pingwatch-preview"
+primary_region = "fra"
+
+[build]
+  dockerfile = "docker/Dockerfile"
+
+[env]
+  PINGWATCH_BIND_HOST = "0.0.0.0"
+  PINGWATCH_BIND_PORT = "8080"
+  PINGWATCH_DB = "/data/pingwatch.db"
+  PINGWATCH_CONFIG = "/data/config.yaml"
+  TZ = "Europe/Berlin"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "get"
+    path = "/healthz"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"

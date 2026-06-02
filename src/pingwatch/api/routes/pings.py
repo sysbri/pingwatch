@@ -7,8 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Query, Response
 
-from pingwatch.api import _queries_compat as q
-from pingwatch.api.deps import ConnDep
+from pingwatch.api.deps import RANGE_TO_MS, ConnDep
+from pingwatch.db import queries as q
 
 router = APIRouter(tags=["pings"])
 
@@ -48,8 +48,7 @@ async def overview(
     conn: ConnDep,
     range_: str = Query(default="24h", alias="range"),
 ) -> dict[str, Any]:
-    range_map = {"1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000}
-    window_ms = range_map.get(range_, 86_400_000)
+    window_ms = RANGE_TO_MS.get(range_, 86_400_000)
     now_ms = int(time.time() * 1000)
     since_ms = now_ms - window_ms
 

@@ -92,7 +92,7 @@ async def test_gateway_outage_blocks_uplink_upgrade(db: aiosqlite.Connection) ->
     )
     await db.commit()
     o1 = await _make_outage(db, dest_id=1, start_ts_ms=10_100)  # gateway
-    o2 = await _make_outage(db, dest_id=2, start_ts_ms=10_000)
+    await _make_outage(db, dest_id=2, start_ts_ms=10_000)
     o3 = await _make_outage(db, dest_id=3, start_ts_ms=10_500)
 
     corr = Correlator(db, bus=Bus(), config=CorrelatorConfig(window_ms=2000))
@@ -113,7 +113,7 @@ async def test_outside_window_not_merged(db: aiosqlite.Connection) -> None:
         "VALUES (3,'Google','8.8.8.8','ICMP','external',1000,2000,2)"
     )
     await db.commit()
-    o2 = await _make_outage(db, dest_id=2, start_ts_ms=10_000)
+    await _make_outage(db, dest_id=2, start_ts_ms=10_000)
     o3 = await _make_outage(db, dest_id=3, start_ts_ms=15_000)  # 5 s later
 
     corr = Correlator(db, bus=Bus(), config=CorrelatorConfig(window_ms=2000))

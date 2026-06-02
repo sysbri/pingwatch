@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
 
@@ -10,6 +11,8 @@ import structlog
 
 from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
+from pingwatch.db.q_destinations import get_destination as _get_destination_typed
+from pingwatch.db.q_destinations import list_destinations as _list_destinations_typed
 from pingwatch.models import DestKind, OutageOpened, TraceSnapshot, TraceTrigger
 from pingwatch.traceroute.diff import (
     detect_route_change,
@@ -62,7 +65,7 @@ class TraceScheduler:
     async def _consume_outages(self, q: asyncio.Queue[OutageOpened]) -> None:
         while not self._stop.is_set():
             opened = await q.get()
-            dest = await queries.get_destination(self._conn, opened.dest_id)
+            dest = await _get_destination_typed(self._conn,opened.dest_id)
             if dest is None or dest.kind != DestKind.EXTERNAL:
                 continue
             task = asyncio.create_task(self._run_once(dest, TraceTrigger.OUTAGE))
@@ -76,7 +79,7 @@ class TraceScheduler:
                 dest_id = int(msg["dest_id"])
             except (KeyError, TypeError, ValueError):
                 continue
-            dest = await queries.get_destination(self._conn, dest_id)
+            dest = await _get_destination_typed(self._conn,dest_id)
             if dest is None or dest.kind != DestKind.EXTERNAL:
                 continue
             self._last_run_ts_ms.pop(dest_id, None)
@@ -87,7 +90,7 @@ class TraceScheduler:
     async def _periodic_loop(self) -> None:
         interval = self._cfg.interval_seconds
         while not self._stop.is_set():
-            destinations = await queries.list_destinations(self._conn, enabled_only=True)
+            destinations = await _list_destinations_typed(self._conn, enabled_only=True)
             now_ms = int(time.time() * 1000)
             for dest in destinations:
                 if dest.kind != DestKind.EXTERNAL:
@@ -97,14 +100,12 @@ class TraceScheduler:
                     task = asyncio.create_task(self._run_once(dest, TraceTrigger.SCHEDULED))
                     self._tasks.add(task)
                     task.add_done_callback(self._tasks.discard)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._stop.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                pass
 
     async def _run_once(self, dest: object, trigger: TraceTrigger) -> None:
         host = getattr(dest, "address", None)
-        dest_id = int(getattr(dest, "id"))
+        dest_id = int(dest.id)
         if not host:
             return
         self._last_run_ts_ms[dest_id] = int(time.time() * 1000)

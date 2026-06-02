@@ -1,12 +1,19 @@
-"""Read/write helpers for the HTTP layer.
+"""HTTP-layer query helpers (formerly api/_queries_compat.py).
 
-We could call `pingwatch.db.queries` directly, but the parallel agent's module
-exposes domain-typed signatures (``Destination`` dataclasses, ``**fields``
-update style, etc) that don't quite match what the HTTP layer needs (plain
-dicts, ``X-Total-Count`` headers, etc). Instead of coupling tightly to that
-module, this shim issues the raw SQL the routes need against the same schema.
+These functions produce plain ``dict`` / ``(list, total)`` responses that the
+API routes require. They are richer than the domain-typed functions in
+q_destinations.py / q_pings.py / q_outages.py / q_traces.py etc.:
 
-The schema is the contract — both layers agree on it via ``schema.sql``.
+  - list_destinations / get_destination return plain dicts instead of
+    Destination dataclasses so routes can serialise directly with FastAPI.
+  - list_outages / list_raw_pings return (rows, total) tuples for
+    X-Total-Count pagination.
+  - get_outage and get_trace inline their member/hop rows.
+  - Several dashboard-specific aggregation helpers have no equivalent in the
+    domain layer.
+
+Where the original domain function and this function are compatible (same SQL,
+same result shape), the domain function is re-used directly.
 """
 
 from __future__ import annotations
@@ -17,18 +24,35 @@ from typing import Any
 
 import aiosqlite
 
+# ------------------------------------------------------------------
+# Shared helpers
+# ------------------------------------------------------------------
+
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-# ---------- Destinations ----------
+# ------------------------------------------------------------------
+# Destinations
+# ------------------------------------------------------------------
 
-async def list_destinations(conn: aiosqlite.Connection) -> list[dict[str, Any]]:
-    cur = await conn.execute(
+async def list_destinations(
+    conn: aiosqlite.Connection, enabled_only: bool = True
+) -> list[dict[str, Any]]:
+    """Return destinations as plain dicts (route-friendly).
+
+    Accepts ``enabled_only`` so internal callers that already pass
+    ``enabled_only=True/False`` continue to work unchanged.
+    """
+    sql = (
         "SELECT id, name, address, type, kind, interval_ms, timeout_ms, port, "
-        "enabled, ordering, resolved_ip FROM destinations ORDER BY ordering"
+        "enabled, ordering, resolved_ip FROM destinations"
     )
+    if enabled_only:
+        sql += " WHERE enabled = 1"
+    sql += " ORDER BY ordering ASC, id ASC"
+    cur = await conn.execute(sql)
     rows = await cur.fetchall()
     return [dict(r) for r in rows]
 
@@ -93,10 +117,8 @@ async def delete_destination(conn: aiosqlite.Connection, dest_id: int) -> bool:
 
 
 async def reset_destination_data(conn: aiosqlite.Connection, dest_id: int) -> None:
-    """Loescht alle historischen Daten eines Ziels (Pings, Aggregates,
-    Outages, Traceroutes). Wird bei Adress-Wechsel ausgefuehrt, damit der
-    User einen sauberen Start hat. Die Destination-Row selbst bleibt erhalten.
-    """
+    """Delete all historical data for a destination (pings, aggregates, outages,
+    traces). The destination row itself is preserved."""
     await conn.execute("DELETE FROM raw_pings WHERE dest_id = ?", (dest_id,))
     await conn.execute("DELETE FROM hourly_aggregates WHERE dest_id = ?", (dest_id,))
     await conn.execute("DELETE FROM daily_aggregates WHERE dest_id = ?", (dest_id,))
@@ -133,7 +155,10 @@ async def reorder_destinations(
     await conn.commit()
 
 
-# ---------- Settings ----------
+# ------------------------------------------------------------------
+# Settings
+# ------------------------------------------------------------------
+
 
 def _coerce(v: str, t: str) -> Any:
     if t == "int":
@@ -194,7 +219,10 @@ async def set_settings(conn: aiosqlite.Connection, items: dict[str, Any]) -> Non
     await conn.commit()
 
 
-# ---------- Outages ----------
+# ------------------------------------------------------------------
+# Outages
+# ------------------------------------------------------------------
+
 
 async def list_outages(
     conn: aiosqlite.Connection,
@@ -231,19 +259,19 @@ async def list_outages(
         args.extend([f"%{search}%", f"%{search}%"])
     where_clause = " AND ".join(where)
     sql = (
-        "SELECT o.id, o.dest_id_primary, o.start_ts_ms, o.end_ts_ms, "
+        "SELECT o.id, o.dest_id_primary, o.start_ts_ms, o.end_ts_ms, "  # noqa: S608  # internal constant identifier, not user input
         "o.duration_ms, o.lost_count, o.type, o.suspect_hop_no, o.trace_id, "
         "o.notes, d.name AS dest_name "
         "FROM outages o LEFT JOIN destinations d ON d.id = o.dest_id_primary "
-        f"WHERE {where_clause} "  # noqa: S608
+        f"WHERE {where_clause} "
         "ORDER BY o.start_ts_ms DESC LIMIT ? OFFSET ?"
     )
     cur = await conn.execute(sql, [*args, limit, offset])
     rows = [dict(r) for r in await cur.fetchall()]
     cnt_sql = (
-        "SELECT COUNT(*) AS c FROM outages o "
+        "SELECT COUNT(*) AS c FROM outages o "  # noqa: S608  # internal constant identifier, not user input
         "LEFT JOIN destinations d ON d.id = o.dest_id_primary "
-        f"WHERE {where_clause}"  # noqa: S608
+        f"WHERE {where_clause}"
     )
     cnt_cur = await conn.execute(cnt_sql, args)
     cnt_row = await cnt_cur.fetchone()
@@ -273,7 +301,10 @@ async def get_outage(
     return outage
 
 
-# ---------- Pings ----------
+# ------------------------------------------------------------------
+# Pings
+# ------------------------------------------------------------------
+
 
 async def list_raw_pings(
     conn: aiosqlite.Connection,
@@ -307,9 +338,9 @@ async def list_raw_pings(
             where.append("(" + " OR ".join(clauses) + ")")
     where_clause = " AND ".join(where)
     sql = (
-        "SELECT id, dest_id, ts_ms, success, latency_us, ttl, sequence, "
+        "SELECT id, dest_id, ts_ms, success, latency_us, ttl, sequence, "  # noqa: S608  # internal constant identifier, not user input
         "error_kind, flags FROM raw_pings "
-        f"WHERE {where_clause} "  # noqa: S608
+        f"WHERE {where_clause} "
         "ORDER BY ts_ms DESC LIMIT ? OFFSET ?"
     )
     cur = await conn.execute(sql, [*args, limit, offset])
@@ -322,7 +353,10 @@ async def list_raw_pings(
     return rows, int(cnt["c"]) if cnt else 0
 
 
-# ---------- Traceroutes ----------
+# ------------------------------------------------------------------
+# Traceroutes
+# ------------------------------------------------------------------
+
 
 async def list_traces(
     conn: aiosqlite.Connection,
@@ -344,9 +378,9 @@ async def list_traces(
     if changed_only:
         where.append("route_changed = 1")
     sql = (
-        "SELECT id, dest_id, ts_ms, trigger, success, hop_count, "
+        "SELECT id, dest_id, ts_ms, trigger, success, hop_count, "  # noqa: S608  # internal constant identifier, not user input
         "signature_hash, route_changed FROM traceroutes "
-        f"WHERE {' AND '.join(where)} ORDER BY ts_ms DESC LIMIT ?"  # noqa: S608
+        f"WHERE {' AND '.join(where)} ORDER BY ts_ms DESC LIMIT ?"
     )
     cur = await conn.execute(sql, [*args, limit])
     return [dict(r) for r in await cur.fetchall()]
@@ -369,7 +403,10 @@ async def get_trace(
     return snap
 
 
-# ---------- Aggregates / Dashboard ----------
+# ------------------------------------------------------------------
+# Dashboard / aggregates
+# ------------------------------------------------------------------
+
 
 async def hourly_aggregates_for(
     conn: aiosqlite.Connection, dest_id: int, since_ms: int, until_ms: int

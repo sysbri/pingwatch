@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -11,26 +12,20 @@ import structlog
 
 from ..bus import Bus, get_bus
 from ..db import queries as q
+from ..db.q_destinations import list_destinations as _list_destinations_typed
+from ..metrics._math import hour_bucket_ms as _hour_bucket_fn
+from ..metrics._math import percentile as _percentile_fn
 from ..models import FLAG_SPIKE, PingSample
 
 log = structlog.get_logger(__name__)
 
 
 def _hour_bucket(ts_ms: int) -> int:
-    return (ts_ms // 3_600_000) * 3_600_000
+    return _hour_bucket_fn(ts_ms)
 
 
 def _percentile(sorted_vals: list[int], pct: float) -> int | None:
-    if not sorted_vals:
-        return None
-    if len(sorted_vals) == 1:
-        return sorted_vals[0]
-    k = (len(sorted_vals) - 1) * pct
-    f = int(k)
-    c = min(f + 1, len(sorted_vals) - 1)
-    if f == c:
-        return sorted_vals[f]
-    return int(sorted_vals[f] + (sorted_vals[c] - sorted_vals[f]) * (k - f))
+    return _percentile_fn(sorted_vals, pct)
 
 
 @dataclass(slots=True)
@@ -122,14 +117,12 @@ class HourlyRollupWorker:
         self._stop.set()
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
                 await self._task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
         await self._flush(finalize_old=True)
 
     async def _boot_recovery(self) -> None:
-        dests = await q.list_destinations(self.conn, enabled_only=False)
+        dests = await _list_destinations_typed(self.conn, enabled_only=False)
         now = int(time.time() * 1000)
         cur_hour = _hour_bucket(now)
         for d in dests:
@@ -177,7 +170,7 @@ class HourlyRollupWorker:
                         # Spike flag may have been set by persister; reading flags off raw_pings
                         # isn't possible mid-flight, so treat as non-spike here.
                         self.ingest(msg, is_spike=False)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 if time.monotonic() >= next_flush:
                     await self._flush()
@@ -209,7 +202,7 @@ class HourlyRollupWorker:
         yesterday_start = today_start_local - timedelta(days=1)
         ystart_ms = int(yesterday_start.timestamp() * 1000)
         yend_ms = today_start_ms
-        dests = await q.list_destinations(self.conn, enabled_only=False)
+        dests = await _list_destinations_typed(self.conn, enabled_only=False)
         for d in dests:
             hourly = await q.list_hourly_aggregates(self.conn, d.id, ystart_ms, yend_ms)
             if not hourly:

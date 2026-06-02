@@ -5,18 +5,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query
 
-from pingwatch.api.deps import ConnDep
+from pingwatch.api import host_fifo
+from pingwatch.api.deps import RANGE_TO_MS, ConnDep
 
 router = APIRouter(prefix="/api/wifi", tags=["wifi"])
 
-_FIFO = "/run/pingwatch-host.fifo"
 _RESULT_DIR = Path("/run/pingwatch-shared")
 _SCAN_FILE = _RESULT_DIR / "wifi-scan.json"
 _STATUS_FILE = _RESULT_DIR / "wifi-status.json"
@@ -44,37 +43,27 @@ def _validate_password(pw: str) -> None:
             raise HTTPException(status_code=400, detail="password contains forbidden chars")
 
 
-def _write_fifo_sync(line: str) -> None:
-    # FIFO write is blocking until a reader is present; helper is always listening.
-    # Use os.open with O_WRONLY (no O_NONBLOCK so we block-wait if helper is busy).
-    fd = os.open(_FIFO, os.O_WRONLY)
-    try:
-        os.write(fd, line.encode("utf-8"))
-    finally:
-        os.close(fd)
-
-
 async def _write_fifo(line: str) -> None:
-    if not line.endswith("\n"):
-        line += "\n"
     try:
-        await asyncio.wait_for(asyncio.to_thread(_write_fifo_sync, line), timeout=3.0)
+        await host_fifo.write_command(line)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="host helper fifo missing") from exc
     except PermissionError as exc:
         raise HTTPException(status_code=503, detail="host helper fifo not writable") from exc
-    except TimeoutError as exc:
+    except (TimeoutError, OSError) as exc:
         raise HTTPException(status_code=503, detail="host helper not responding") from exc
 
 
-async def _wait_for_file(path: Path, max_wait_s: float, min_mtime: float = 0.0) -> dict[str, Any] | None:
+async def _wait_for_file(
+    path: Path, max_wait_s: float, min_mtime: float = 0.0
+) -> dict[str, Any] | None:
     deadline = time.monotonic() + max_wait_s
     while time.monotonic() < deadline:
         try:
-            st = path.stat()
+            st = path.stat()  # noqa: ASYNC240  # polling loop, blocking is acceptable
             if st.st_mtime >= min_mtime and st.st_size > 0:
                 try:
-                    return json.loads(path.read_text(encoding="utf-8"))
+                    return json.loads(path.read_text(encoding="utf-8"))  # noqa: ASYNC240  # polling loop, blocking is acceptable
                 except json.JSONDecodeError:
                     pass  # partial write, keep polling
         except FileNotFoundError:
@@ -104,7 +93,7 @@ async def scan() -> dict[str, Any]:
 
 
 @router.post("/connect")
-async def connect(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def connect(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008  # FastAPI dependency injection
     ssid = str(payload.get("ssid") or "").strip()
     password = str(payload.get("password") or "")
     _validate_ssid(ssid)
@@ -118,7 +107,11 @@ async def connect(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=504, detail="connect timeout")
 
     if data.get("ok"):
-        return {"ok": True, "ssid": data.get("ssid", ssid), "message": data.get("message", "connected")}
+        return {
+            "ok": True,
+            "ssid": data.get("ssid", ssid),
+            "message": data.get("message", "connected"),
+        }
     # Failure path — surface message, choose 400 for auth-like errors, 502 otherwise.
     msg = str(data.get("message", "connect failed"))
     lower = msg.lower()
@@ -148,7 +141,7 @@ async def get_status() -> dict[str, Any]:
 
 
 @router.post("/forget")
-async def forget(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def forget(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008  # FastAPI dependency injection
     ssid = str(payload.get("ssid") or "").strip()
     _validate_ssid(ssid)
     await _write_fifo(f"wifi_forget\t{ssid}")
@@ -173,8 +166,7 @@ async def overview_endpoint(
     range_: str = Query(default="24h", alias="range"),
 ) -> dict[str, Any]:
     """WLAN-Detail-View payload: current + KPIs + series + events + APs."""
-    range_map = {"1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000}
-    window_ms = range_map.get(range_, 86_400_000)
+    window_ms = RANGE_TO_MS.get(range_, 86_400_000)
     now_ms = int(time.time() * 1000)
     since_ms = now_ms - window_ms
 
@@ -211,7 +203,9 @@ async def overview_endpoint(
         "WHERE ts_ms >= ? GROUP BY event_type",
         (since_ms,),
     )
-    ev_counts: dict[str, int] = {row["event_type"]: int(row["cnt"]) for row in await ecur.fetchall()}
+    ev_counts: dict[str, int] = {
+        row["event_type"]: int(row["cnt"]) for row in await ecur.fetchall()
+    }
     kpi = {
         "rssi_mean": round(rssi_mean, 1) if rssi_mean is not None else None,
         "rssi_min": rssi_min,

@@ -20,6 +20,7 @@ import structlog
 
 from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
+from pingwatch.db.q_destinations import list_destinations as _list_destinations_typed
 from pingwatch.models import (
     Destination,
     OutageClosed,
@@ -89,7 +90,9 @@ class OutageDetector:
         rows = await queries.open_outages(self._conn)
         for row in rows:
             outage_id = int(row["id"])
-            dest_id = row.get("dest_id_primary") if isinstance(row, dict) else row["dest_id_primary"]
+            dest_id = (
+                row.get("dest_id_primary") if isinstance(row, dict) else row["dest_id_primary"]
+            )
             start_ts_ms = int(row["start_ts_ms"])
             last_ts_ms = await _last_ping_ts(self._conn, dest_id) if dest_id else None
             ref_ts = last_ts_ms if last_ts_ms is not None else start_ts_ms
@@ -155,8 +158,10 @@ class OutageDetector:
         first_ok_ts_ms = sample.ts_ms - (self._k - 1) * state.dest.interval_ms
         outage_id = state.open_outage_id
         start_ts_ms = state.open_start_ts_ms or first_ok_ts_ms
-        # end_ts_ms = ts_ms_of_first_OK - (K-1) * interval_ms (plan: section 5).
-        end_ts_ms = first_ok_ts_ms - (self._k - 1) * state.dest.interval_ms
+        # Outage ends at the last loss = one interval before the first OK.
+        # first_ok_ts_ms already backs out the K-1 confirming OKs, so the end is
+        # independent of K. (The old code subtracted (K-1) twice -> wrong for K>=3.)
+        end_ts_ms = first_ok_ts_ms - state.dest.interval_ms
         await queries.close_outage(self._conn, outage_id, end_ts_ms)
         await _update_outage_lost_count(self._conn, outage_id, state.lost_count)
         closed = OutageClosed(
@@ -239,6 +244,5 @@ async def _update_outage_lost_count(conn: object, outage_id: int, lost_count: in
 
 
 async def run_outage_detector(conn, bus) -> None:
-    from pingwatch.db import queries
-    dests = await queries.list_destinations(conn, enabled_only=True)
+    dests = await _list_destinations_typed(conn, enabled_only=True)
     await OutageDetector(conn, dests, bus).run()

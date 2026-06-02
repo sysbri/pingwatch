@@ -4,6 +4,7 @@ against a freshly-seeded SQLite DB.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from collections.abc import Iterator
@@ -21,16 +22,17 @@ def client() -> Iterator[TestClient]:
     app = build_app(db_path=path)
     with TestClient(app) as c:
         yield c
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(path)
-    except OSError:
-        pass
 
 
 def test_healthz(client: TestClient) -> None:
     r = client.get("/healthz")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    body = r.json()
+    assert body["status"] == "ok"
+    # Smart-healthz reports the warmup phase during the first 180s of uptime.
+    assert body.get("phase") == "warmup"
 
 
 def test_index(client: TestClient) -> None:

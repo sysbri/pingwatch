@@ -9,7 +9,9 @@ from pingwatch.models import OutageType, WifiEvent, WifiEventType
 from pingwatch.outages.classifier import maybe_tag_wlan, tag_from_wifi_event
 
 
-async def _make_outage(db: aiosqlite.Connection, start: int, end: int | None, type_: str = "EINZEL") -> int:
+async def _make_outage(
+    db: aiosqlite.Connection, start: int, end: int | None, type_: str = "EINZEL"
+) -> int:
     cur = await db.execute(
         "INSERT INTO outages(dest_id_primary, start_ts_ms, end_ts_ms, type, lost_count) "
         "VALUES (2, ?, ?, ?, 2)",

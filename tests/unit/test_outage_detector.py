@@ -11,8 +11,8 @@ import pytest_asyncio
 
 from pingwatch.bus import Bus
 from pingwatch.models import (
-    DestKind,
     Destination,
+    DestKind,
     OutageClosed,
     OutageOpened,
     PingSample,
@@ -60,7 +60,7 @@ def _loss(dest_id: int, ts: int) -> PingSample:
     return PingSample(dest_id=dest_id, ts_ms=ts, success=False, error_kind="timeout")
 
 
-async def _collect(bus: Bus, topic: str, n: int, timeout: float = 1.0) -> list[object]:
+async def _collect(bus: Bus, topic: str, n: int, timeout: float = 1.0) -> list[object]:  # noqa: ASYNC109  # explicit timeout param is intentional
     collected: list[object] = []
     async with bus.subscribe(topic) as q:
         for _ in range(n):
@@ -69,7 +69,9 @@ async def _collect(bus: Bus, topic: str, n: int, timeout: float = 1.0) -> list[o
 
 
 @pytest.mark.asyncio
-async def test_two_losses_open_outage(db: aiosqlite.Connection, two_dests: list[Destination]) -> None:
+async def test_two_losses_open_outage(
+    db: aiosqlite.Connection, two_dests: list[Destination]
+) -> None:
     bus = Bus()
     detector = OutageDetector(db, two_dests, bus=bus)
     collector_task = asyncio.create_task(_collect(bus, "outages.new", 1))
@@ -103,7 +105,7 @@ async def test_two_oks_close_outage(db: aiosqlite.Connection, two_dests: list[De
     # Two losses → open
     await detector.process(_loss(2, 1000))
     await detector.process(_loss(2, 2000))
-    # Two successes → close. end_ts_ms = first_ok_ts - (K-1)*interval = 3000 - 1000 = 2000? No: K=2.
+    # Two successes → close. Outage ends at the last loss = 2000.
     await detector.process(_ok(2, 3000))
     await detector.process(_ok(2, 4000))
 
@@ -112,7 +114,7 @@ async def test_two_oks_close_outage(db: aiosqlite.Connection, two_dests: list[De
     closed = events[0]
     assert isinstance(closed, OutageClosed)
     assert closed.dest_id == 2
-    # first_ok_ts=3000, K=2 → end_ts_ms = 3000 - (2-1)*1000 = 2000
+    # first_ok=3000 → end = first_ok - interval = last loss = 2000
     assert closed.end_ts_ms == 2000
 
     cur = await db.execute("SELECT start_ts_ms, end_ts_ms, lost_count FROM outages")
@@ -123,7 +125,9 @@ async def test_two_oks_close_outage(db: aiosqlite.Connection, two_dests: list[De
 
 
 @pytest.mark.asyncio
-async def test_single_loss_does_not_open(db: aiosqlite.Connection, two_dests: list[Destination]) -> None:
+async def test_single_loss_does_not_open(
+    db: aiosqlite.Connection, two_dests: list[Destination]
+) -> None:
     bus = Bus()
     detector = OutageDetector(db, two_dests, bus=bus)
     await detector.process(_loss(2, 1000))
@@ -215,3 +219,31 @@ async def test_threshold_hot_reload(db: aiosqlite.Connection, two_dests: list[De
     cur = await db.execute("SELECT COUNT(*) AS c FROM outages")
     row = await cur.fetchone()
     assert row["c"] == 1
+
+
+@pytest.mark.asyncio
+async def test_k3_close_uses_last_loss_as_end(
+    db: aiosqlite.Connection, two_dests: list[Destination]
+) -> None:
+    """Regression: end_ts_ms must be the last loss regardless of K (was wrong K>=3)."""
+    bus = Bus()
+    detector = OutageDetector(db, two_dests, bus=bus, k_consec_ok=3)
+    closes_task = asyncio.create_task(_collect(bus, "outages.close", 1))
+    await asyncio.sleep(0)
+
+    await detector.process(_loss(2, 1000))
+    await detector.process(_loss(2, 2000))  # open, start=1000, last loss=2000
+    await detector.process(_ok(2, 3000))    # first OK
+    await detector.process(_ok(2, 4000))
+    await detector.process(_ok(2, 5000))    # K=3 → close
+
+    events = await closes_task
+    closed = events[0]
+    assert isinstance(closed, OutageClosed)
+    # first_ok=3000 → end = first_ok - interval = last loss = 2000 (NOT 1000)
+    assert closed.end_ts_ms == 2000
+
+    cur = await db.execute("SELECT start_ts_ms, end_ts_ms FROM outages")
+    row = await cur.fetchone()
+    assert row["start_ts_ms"] == 1000
+    assert row["end_ts_ms"] == 2000

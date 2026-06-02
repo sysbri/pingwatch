@@ -1,17 +1,19 @@
-"""Persistent TCP heartbeat to a quasi-always-available endpoint.
+"""Connectivity heartbeat over TCP.
 
-Every ``heartbeat.interval_ms`` we attempt a tiny write (16 random bytes)
-plus a follow-up read. RTT = time from ``write()`` completion to readback.
-A separate tick task detects miss windows -- if ``now - last_hb_ts``
-exceeds ``heartbeat.miss_threshold_ms`` we emit a LOSS event; once the
-next successful heartbeat lands, we emit RECOVER with duration.
+Every ``heartbeat.interval_ms`` we open a TCP connection to the target, measure
+the connect RTT, and close it. A miss-watcher emits a LOSS event once
+``now - last_hb_ts`` exceeds ``heartbeat.miss_threshold_ms``; the next successful
+connect emits RECOVER with the gap duration.
+
+We measure *connect* time rather than writing a payload: the default target is a
+TLS port (e.g. 1.1.1.1:443) which resets arbitrary bytes, so the old
+write-and-readback approach produced constant "connection reset by peer" noise.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import time
 from dataclasses import dataclass
 
@@ -20,6 +22,7 @@ import structlog
 from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
 from pingwatch.models import HeartbeatEvent, HeartbeatEventType
+from pingwatch.util import sleep_or_stop
 
 log = structlog.get_logger(__name__)
 
@@ -29,9 +32,7 @@ class HeartbeatConfig:
     target: str = "1.1.1.1:443"
     interval_ms: int = 200
     miss_threshold_ms: int = 800
-    payload_bytes: int = 16
-    backoff_initial_s: float = 0.5
-    backoff_max_s: float = 30.0
+    connect_timeout_s: float = 5.0
 
 
 class TcpHeartbeatWorker:
@@ -60,46 +61,30 @@ class TcpHeartbeatWorker:
                 await watcher
 
     async def _loop(self) -> None:
-        backoff = self._cfg.backoff_initial_s
         host, port = self._parse_target()
         while not self._stop.is_set():
+            t0 = time.perf_counter()
             try:
-                reader, writer = await asyncio.wait_for(
+                _reader, writer = await asyncio.wait_for(
                     asyncio.open_connection(host, port),
-                    timeout=5.0,
+                    timeout=self._cfg.connect_timeout_s,
                 )
-                backoff = self._cfg.backoff_initial_s
-                await self._beat_loop(reader, writer)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
-                log.warning("heartbeat.connect_error", error=str(exc))
-                await self._sleep_or_stop(backoff)
-                backoff = min(self._cfg.backoff_max_s, backoff * 2)
-
-    async def _beat_loop(
-        self,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-    ) -> None:
-        try:
-            while not self._stop.is_set():
-                payload = os.urandom(self._cfg.payload_bytes)
-                t0 = time.perf_counter()
-                writer.write(payload)
-                await writer.drain()
-                with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(reader.read(self._cfg.payload_bytes), timeout=0.1)
-                t1 = time.perf_counter()
-                now_ms = int(time.time() * 1000)
-                self._last_hb_ts_ms = now_ms
-                if self._loss_open:
-                    await self._emit_recover(now_ms, int((t1 - t0) * 1_000_000))
-                await asyncio.sleep(self._cfg.interval_ms / 1000)
-        finally:
+            except Exception:  # noqa: BLE001
+                # A failed connect is a missed beat; the miss-watcher emits LOSS
+                # once the gap exceeds the threshold. No per-attempt log spam.
+                await self._sleep_or_stop(self._cfg.interval_ms / 1000)
+                continue
+            rtt_us = int((time.perf_counter() - t0) * 1_000_000)
             writer.close()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(Exception):  # noqa: BLE001
                 await writer.wait_closed()
+            now_ms = int(time.time() * 1000)
+            self._last_hb_ts_ms = now_ms
+            if self._loss_open:
+                await self._emit_recover(now_ms, rtt_us)
+            await self._sleep_or_stop(self._cfg.interval_ms / 1000)
 
     async def _miss_watcher(self) -> None:
         while not self._stop.is_set():
@@ -147,10 +132,7 @@ class TcpHeartbeatWorker:
         return host, int(port_s)
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        try:
-            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
-        except asyncio.TimeoutError:
-            pass
+        await sleep_or_stop(self._stop, seconds)
 
     def stop(self) -> None:
         self._stop.set()

@@ -13,15 +13,14 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from pingwatch.api import _queries_compat as q
+from pingwatch.api import host_fifo
 from pingwatch.api.deps import ConnDep
 from pingwatch.api.schemas import OkResponse, SystemMetrics
+from pingwatch.db import queries as q
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
-
-HOST_FIFO = Path("/run/pingwatch-host.fifo")
 
 
 def _read_cpu_pct() -> float:
@@ -38,7 +37,7 @@ def _read_ram() -> tuple[int, int]:
 
         used, total = pi_metrics.ram_mb()
         return used, total
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001,S110
         pass
     meminfo = Path("/proc/meminfo")
     if not meminfo.exists():
@@ -61,7 +60,7 @@ def _read_temp() -> float | None:
         from pingwatch.system import pi_metrics  # type: ignore[attr-defined]
 
         return pi_metrics.cpu_temp_c()
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001,S110
         pass
     path = Path("/sys/class/thermal/thermal_zone0/temp")
     if path.exists():
@@ -106,19 +105,30 @@ async def get_system(conn: ConnDep) -> SystemMetrics:
     )
 
 
-@router.post("/diagnose-bundle")
-async def diagnose_bundle(conn: ConnDep) -> StreamingResponse:  # noqa: ARG001
-    try:
-        from pingwatch.system import diagnose  # type: ignore[attr-defined]
+# GET so the frontend's `window.location = '/api/system/diagnose-bundle'` works.
+@router.get("/diagnose-bundle")
+async def diagnose_bundle(conn: ConnDep) -> StreamingResponse:
+    from pingwatch.export import zip_bundle
 
-        data = await diagnose.build_bundle()
+    try:
+        path = await zip_bundle.build_diagnose_bundle(conn)
     except Exception as exc:  # noqa: BLE001
+        log.exception("diagnose-bundle-failed")
         raise HTTPException(
             status_code=503,
-            detail=f"diagnose unavailable: {type(exc).__name__}",
+            detail=f"diagnose failed: {type(exc).__name__}",
         ) from exc
+
+    def _iter() -> Any:
+        try:
+            with open(path, "rb") as fh:
+                while chunk := fh.read(64 * 1024):
+                    yield chunk
+        finally:
+            path.unlink(missing_ok=True)
+
     return StreamingResponse(
-        iter([data]),
+        _iter(),
         media_type="application/zip",
         headers={
             "Content-Disposition": (
@@ -128,15 +138,14 @@ async def diagnose_bundle(conn: ConnDep) -> StreamingResponse:  # noqa: ARG001
     )
 
 
-def _write_host_command(cmd: str) -> bool:
-    if not HOST_FIFO.exists():
-        log.warning("host-fifo-missing", path=str(HOST_FIFO), cmd=cmd)
-        return False
+async def _write_host_command(cmd: str) -> bool:
     try:
-        with open(HOST_FIFO, "w") as fh:
-            fh.write(cmd + "\n")
+        await host_fifo.write_command(cmd)
         return True
-    except OSError as exc:
+    except FileNotFoundError:
+        log.warning("host-fifo-missing", cmd=cmd)
+        return False
+    except (PermissionError, TimeoutError, OSError) as exc:
         log.warning("host-fifo-write-failed", error=str(exc))
         return False
 
@@ -146,7 +155,7 @@ async def restart_system() -> OkResponse:
     # The host helper (deploy/pingwatch-host-helper.sh) expects the verb
     # `reboot` for a full pi reboot. Use `restart_app` to only bounce the
     # container — exposed via /api/system/restart-app if needed.
-    ok = _write_host_command("reboot")
+    ok = await _write_host_command("reboot")
     return OkResponse(ok=ok, detail="restart triggered" if ok else "fifo unavailable")
 
 
@@ -162,7 +171,7 @@ async def factory_reset(
     await q.factory_reset(conn)
     # The helper does its own `docker compose down -v` + reboot; we just
     # need to trigger the `factory_reset` verb.
-    _write_host_command("factory_reset")
+    await _write_host_command("factory_reset")
     return OkResponse(ok=True, detail="factory reset complete")
 
 

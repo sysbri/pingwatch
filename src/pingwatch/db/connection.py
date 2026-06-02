@@ -52,6 +52,7 @@ DEFAULT_SETTINGS: tuple[tuple[str, str, str], ...] = (
     ("retention.outages_days", "180", "int"),
     ("retention.traces_days", "30", "int"),
     ("retention.wifi_rssi_days", "7", "int"),
+    ("retention.wifi_events_days", "180", "int"),
     ("retention.stream_samples_days", "7", "int"),
     ("retention.heartbeat_days", "30", "int"),
     ("retention.notifications_days", "30", "int"),

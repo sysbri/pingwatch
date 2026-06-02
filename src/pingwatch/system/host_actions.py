@@ -23,7 +23,7 @@ _VALID_COMMANDS = {"reboot", "factory_reset", "update_check", "restart_app"}
 async def _write_command(cmd: str, payload: str = "") -> None:
     if cmd not in _VALID_COMMANDS:
         raise ValueError(f"unknown host command: {cmd}")
-    if not FIFO_PATH.exists():
+    if not FIFO_PATH.exists():  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
         log.warning("host_actions.fifo_missing", path=str(FIFO_PATH), cmd=cmd)
         return
     line = f"{cmd}\t{payload}\n".encode()

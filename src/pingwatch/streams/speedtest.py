@@ -122,35 +122,59 @@ def _persist_result_sync_payload(
     }
 
 
-# ---------------- Provider: Cloudflare ----------------
-async def _run_cloudflare(conn, task_id: str, settings: dict[str, Any]) -> dict[str, Any]:
-    server = "speed.cloudflare.com"
+# ---------------- Provider lifecycle template ----------------
+
+async def _run_provider(
+    conn: Any,
+    task_id: str,
+    provider_name: str,
+    server_default: str,
+    measure_fn: Any,
+) -> dict[str, Any]:
+    """Shared lifecycle for all three providers.
+
+    ``measure_fn`` is ``async () -> dict`` that returns partial result fields:
+    down_mbps, up_mbps, latency_ms (optional), jitter_ms (optional),
+    bytes_down, bytes_up, server (optional — overrides ``server_default``).
+    Raises on failure; raises asyncio.CancelledError on cancellation;
+    raises TimeoutError on timeout.
+    """
     ts_ms = int(time.time() * 1000)
     t_start = time.perf_counter()
     _pause_trickle.set()
-    log.info("speedtest.start", task_id=task_id, provider="cloudflare")
+    log.info("speedtest.start", task_id=task_id, provider=provider_name)
 
     await queries.insert_speedtest_start(conn, task_id, ts_ms)
 
     result: dict[str, Any] = {"task_id": task_id, "status": "running", "ts_ms": ts_ms}
     down_mbps = up_mbps = latency_ms = jitter_ms = None
     bytes_down = bytes_up = 0
+    server = server_default
     err: str | None = None
     duration_ms = 0
+    payload: dict[str, Any] = {}
     try:
-        async with _build_client() as cli:
-            latency_ms, jitter_ms = await _latency(cli)
-            down_mbps, bytes_down = await _download(cli)
-            up_mbps, bytes_up = await _upload(cli)
+        data = await measure_fn()
+        down_mbps = data.get("down_mbps")
+        up_mbps = data.get("up_mbps")
+        latency_ms = data.get("latency_ms")
+        jitter_ms = data.get("jitter_ms")
+        bytes_down = data.get("bytes_down", 0)
+        bytes_up = data.get("bytes_up", 0)
+        server = data.get("server", server_default)
         result["status"] = "done"
     except asyncio.CancelledError:
         err = "cancelled"
         result["status"] = "aborted"
         raise
+    except TimeoutError:
+        err = "timeout"
+        result["status"] = "failed"
+        log.warning("speedtest.failed", task_id=task_id, error=err, provider=provider_name)
     except Exception as exc:  # noqa: BLE001
         err = str(exc)[:200]
         result["status"] = "failed"
-        log.warning("speedtest.failed", task_id=task_id, error=err)
+        log.warning("speedtest.failed", task_id=task_id, error=err, provider=provider_name)
     finally:
         duration_ms = int((time.perf_counter() - t_start) * 1000)
         payload = _persist_result_sync_payload(
@@ -173,7 +197,32 @@ async def _run_cloudflare(conn, task_id: str, settings: dict[str, Any]) -> dict[
     return result
 
 
+# ---------------- Provider: Cloudflare ----------------
+
+async def _measure_cloudflare() -> dict[str, Any]:
+    async with _build_client() as cli:
+        latency_ms, jitter_ms = await _latency(cli)
+        down_mbps, bytes_down = await _download(cli)
+        up_mbps, bytes_up = await _upload(cli)
+    return {
+        "down_mbps": down_mbps,
+        "up_mbps": up_mbps,
+        "latency_ms": latency_ms,
+        "jitter_ms": jitter_ms,
+        "bytes_down": bytes_down,
+        "bytes_up": bytes_up,
+        "server": "speed.cloudflare.com",
+    }
+
+
+async def _run_cloudflare(conn: Any, task_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+    return await _run_provider(
+        conn, task_id, "cloudflare", "speed.cloudflare.com", _measure_cloudflare
+    )
+
+
 # ---------------- Provider: Ookla speedtest-cli ----------------
+
 def _run_speedtest_net_sync() -> dict[str, Any]:
     import speedtest  # type: ignore
     s = speedtest.Speedtest(secure=True)
@@ -193,68 +242,18 @@ def _run_speedtest_net_sync() -> dict[str, Any]:
     }
 
 
-async def _run_speedtest_net(conn, task_id: str, settings: dict[str, Any]) -> dict[str, Any]:
-    ts_ms = int(time.time() * 1000)
-    t_start = time.perf_counter()
-    _pause_trickle.set()
-    log.info("speedtest.start", task_id=task_id, provider="speedtest_net")
-
-    await queries.insert_speedtest_start(conn, task_id, ts_ms)
-
-    result: dict[str, Any] = {"task_id": task_id, "status": "running", "ts_ms": ts_ms}
-    down_mbps = up_mbps = latency_ms = None
-    jitter_ms = None
-    bytes_down = bytes_up = 0
-    server = "speedtest.net"
-    err: str | None = None
-    duration_ms = 0
-    try:
-        data = await asyncio.wait_for(
+async def _run_speedtest_net(conn: Any, task_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+    async def _measure() -> dict[str, Any]:
+        return await asyncio.wait_for(
             asyncio.to_thread(_run_speedtest_net_sync),
             timeout=SPEEDTEST_NET_TIMEOUT_S,
         )
-        down_mbps = data["down_mbps"]
-        up_mbps = data["up_mbps"]
-        latency_ms = data["latency_ms"]
-        server = data["server"]
-        bytes_down = data["bytes_down"]
-        bytes_up = data["bytes_up"]
-        result["status"] = "done"
-    except asyncio.CancelledError:
-        err = "cancelled"
-        result["status"] = "aborted"
-        raise
-    except asyncio.TimeoutError:
-        err = "timeout"
-        result["status"] = "failed"
-        log.warning("speedtest.failed", task_id=task_id, error=err, provider="speedtest_net")
-    except Exception as exc:  # noqa: BLE001
-        err = str(exc)[:200]
-        result["status"] = "failed"
-        log.warning("speedtest.failed", task_id=task_id, error=err, provider="speedtest_net")
-    finally:
-        duration_ms = int((time.perf_counter() - t_start) * 1000)
-        payload = _persist_result_sync_payload(
-            down_mbps=down_mbps, up_mbps=up_mbps,
-            latency_ms=latency_ms, jitter_ms=jitter_ms,
-            bytes_down=bytes_down, bytes_up=bytes_up,
-            duration_ms=duration_ms, server=server,
-        )
-        try:
-            if result["status"] == "done":
-                await queries.update_speedtest_done(conn, task_id, payload)
-            else:
-                await queries.update_speedtest_failed(conn, task_id, err or "unknown")
-        except Exception:  # noqa: BLE001
-            log.exception("speedtest.persist_failed", task_id=task_id)
-        _pause_trickle.clear()
 
-    result.update(payload)
-    result["error"] = err
-    return result
+    return await _run_provider(conn, task_id, "speedtest_net", "speedtest.net", _measure)
 
 
 # ---------------- Provider: iperf3 LAN ----------------
+
 async def _iperf3_run(host: str, port: int, reverse: bool) -> dict[str, Any]:
     args = ["iperf3", "-c", host, "-p", str(port), "-J", "-t", "5"]
     if reverse:
@@ -266,7 +265,7 @@ async def _iperf3_run(host: str, port: int, reverse: bool) -> dict[str, Any]:
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=IPERF3_TIMEOUT_S)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         raise
     if proc.returncode != 0:
@@ -277,28 +276,16 @@ async def _iperf3_run(host: str, port: int, reverse: bool) -> dict[str, Any]:
         raise RuntimeError(f"iperf3 json parse: {exc}") from exc
 
 
-async def _run_iperf3(conn, task_id: str, settings: dict[str, Any]) -> dict[str, Any]:
+async def _run_iperf3(conn: Any, task_id: str, settings: dict[str, Any]) -> dict[str, Any]:
     host = (settings.get("speedtest.iperf3_server") or "").strip()
     try:
         port = int(settings.get("speedtest.iperf3_port") or 5201)
     except (TypeError, ValueError):
         port = 5201
 
-    ts_ms = int(time.time() * 1000)
-    t_start = time.perf_counter()
-    _pause_trickle.set()
-    log.info("speedtest.start", task_id=task_id, provider="iperf3", host=host, port=port)
+    server_default = f"iperf3 @ {host}:{port}" if host else "iperf3 (unconfigured)"
 
-    await queries.insert_speedtest_start(conn, task_id, ts_ms)
-
-    result: dict[str, Any] = {"task_id": task_id, "status": "running", "ts_ms": ts_ms}
-    down_mbps = up_mbps = latency_ms = None
-    jitter_ms = None
-    bytes_down = bytes_up = 0
-    server = f"iperf3 @ {host}:{port}" if host else "iperf3 (unconfigured)"
-    err: str | None = None
-    duration_ms = 0
-    try:
+    async def _measure() -> dict[str, Any]:
         if not host:
             raise RuntimeError("iperf3 server not configured")
         # Upload (client -> server, default direction)
@@ -320,6 +307,7 @@ async def _run_iperf3(conn, task_id: str, settings: dict[str, Any]) -> dict[str,
         down_mbps = round(float(down_bps) / 1_000_000.0, 2)
         bytes_down = int(down_json.get("end", {}).get("sum_received", {}).get("bytes", 0) or 0)
         # RTT aus iperf3 streams (mean_rtt is microseconds)
+        latency_ms = None
         try:
             streams = down_json.get("end", {}).get("streams", [])
             if streams:
@@ -327,48 +315,24 @@ async def _run_iperf3(conn, task_id: str, settings: dict[str, Any]) -> dict[str,
                 mean_rtt_us = sender.get("mean_rtt")
                 if mean_rtt_us:
                     latency_ms = float(mean_rtt_us) / 1000.0
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S110
             pass
         host_connect = down_json.get("start", {}).get("connecting_to", {}).get("host") or host
-        server = f"iperf3 @ {host_connect}:{port}"
-        result["status"] = "done"
-    except asyncio.CancelledError:
-        err = "cancelled"
-        result["status"] = "aborted"
-        raise
-    except asyncio.TimeoutError:
-        err = "iperf3 timeout"
-        result["status"] = "failed"
-        log.warning("speedtest.failed", task_id=task_id, error=err, provider="iperf3")
-    except Exception as exc:  # noqa: BLE001
-        err = str(exc)[:200]
-        result["status"] = "failed"
-        log.warning("speedtest.failed", task_id=task_id, error=err, provider="iperf3")
-    finally:
-        duration_ms = int((time.perf_counter() - t_start) * 1000)
-        payload = _persist_result_sync_payload(
-            down_mbps=down_mbps, up_mbps=up_mbps,
-            latency_ms=latency_ms, jitter_ms=jitter_ms,
-            bytes_down=bytes_down, bytes_up=bytes_up,
-            duration_ms=duration_ms, server=server,
-        )
-        try:
-            if result["status"] == "done":
-                await queries.update_speedtest_done(conn, task_id, payload)
-            else:
-                await queries.update_speedtest_failed(conn, task_id, err or "unknown")
-        except Exception:  # noqa: BLE001
-            log.exception("speedtest.persist_failed", task_id=task_id)
-        _pause_trickle.clear()
+        return {
+            "down_mbps": down_mbps,
+            "up_mbps": up_mbps,
+            "latency_ms": latency_ms,
+            "bytes_down": bytes_down,
+            "bytes_up": bytes_up,
+            "server": f"iperf3 @ {host_connect}:{port}",
+        }
 
-    result.update(payload)
-    result["error"] = err
-    return result
+    return await _run_provider(conn, task_id, "iperf3", server_default, _measure)
 
 
 # ---------------- Public Dispatcher ----------------
 async def run_speedtest(
-    conn, task_id: str, settings: dict[str, Any] | None = None
+    conn: Any, task_id: str, settings: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Dispatch to provider based on settings['speedtest.provider']. Defaults to cloudflare."""
     settings = settings or {}

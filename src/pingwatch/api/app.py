@@ -28,12 +28,14 @@ from pingwatch.api.routes import (
     export,
     outages,
     pings,
-    settings as settings_routes,
     speedtest,
     system,
     targets,
     traces,
     wifi,
+)
+from pingwatch.api.routes import (
+    settings as settings_routes,
 )
 from pingwatch.db.connection import DB
 
