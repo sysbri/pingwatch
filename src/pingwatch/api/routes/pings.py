@@ -7,8 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Query, Response
 
-from pingwatch.api import _queries_compat as q
 from pingwatch.api.deps import RANGE_TO_MS, ConnDep
+from pingwatch.db import queries as q
 
 router = APIRouter(tags=["pings"])
 

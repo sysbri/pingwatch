@@ -13,10 +13,10 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from pingwatch.api import _queries_compat as q
 from pingwatch.api import host_fifo
 from pingwatch.api.deps import ConnDep
 from pingwatch.api.schemas import OkResponse, SystemMetrics
+from pingwatch.db import queries as q
 
 log = structlog.get_logger(__name__)
 

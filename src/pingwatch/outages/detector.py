@@ -20,6 +20,7 @@ import structlog
 
 from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
+from pingwatch.db.q_destinations import list_destinations as _list_destinations_typed
 from pingwatch.models import (
     Destination,
     OutageClosed,
@@ -243,6 +244,5 @@ async def _update_outage_lost_count(conn: object, outage_id: int, lost_count: in
 
 
 async def run_outage_detector(conn, bus) -> None:
-    from pingwatch.db import queries
-    dests = await queries.list_destinations(conn, enabled_only=True)
+    dests = await _list_destinations_typed(conn, enabled_only=True)
     await OutageDetector(conn, dests, bus).run()

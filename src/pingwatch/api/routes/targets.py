@@ -8,7 +8,6 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, HTTPException, status
 
-from pingwatch.api import _queries_compat as q
 from pingwatch.api.deps import ConnDep
 from pingwatch.api.schemas import (
     OkResponse,
@@ -19,7 +18,8 @@ from pingwatch.api.schemas import (
     TestResult,
 )
 from pingwatch.bus import get_bus
-from pingwatch.db import queries as dbq
+from pingwatch.db import queries as q
+from pingwatch.db.q_destinations import get_destination as _get_destination_typed
 
 router = APIRouter(prefix="/api/targets", tags=["targets"])
 
@@ -139,7 +139,7 @@ async def reset_target_data(target_id: int, conn: ConnDep) -> OkResponse:
 @router.post("/{target_id}/test", response_model=TestResult)
 async def test_target(target_id: int, conn: ConnDep) -> TestResult:
     """Run a one-shot probe synchronously and return the result."""
-    dest = await dbq.get_destination(conn, target_id)
+    dest = await _get_destination_typed(conn, target_id)
     if dest is None:
         raise HTTPException(status_code=404, detail="target not found")
 

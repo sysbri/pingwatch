@@ -6,6 +6,23 @@ import pytest
 
 from pingwatch.db import queries as q
 from pingwatch.db.connection import open_db
+from pingwatch.db.q_destinations import (
+    delete_destination as _delete_destination,
+)
+from pingwatch.db.q_destinations import (
+    get_destination as _get_destination,
+)
+from pingwatch.db.q_destinations import (
+    list_destinations as _list_destinations,
+)
+from pingwatch.db.q_destinations import (
+    reorder_destinations as _reorder_destinations,
+)
+from pingwatch.db.q_destinations import (
+    update_destination as _update_destination,
+)
+from pingwatch.db.q_outages import list_outages as _list_outages
+from pingwatch.db.q_pings import list_raw_pings as _list_raw_pings
 from pingwatch.models import (
     DestKind,
     HeartbeatEvent,
@@ -28,7 +45,7 @@ def _now_ms() -> int:
 @pytest.mark.asyncio
 async def test_seeded_destinations_and_settings(tmp_path):
     async with open_db(tmp_path / "x.db") as conn:
-        dests = await q.list_destinations(conn)
+        dests = await _list_destinations(conn)
         assert len(dests) == 4
         names = [d.name for d in dests]
         assert "Gateway" in names
@@ -70,36 +87,36 @@ async def test_destination_crud(tmp_path):
             ordering=99,
         )
         assert dest_id > 0
-        d = await q.get_destination(conn, dest_id)
+        d = await _get_destination(conn, dest_id)
         assert d is not None
         assert d.name == "My Test"
         assert d.type == ProbeType.HTTP
 
-        await q.update_destination(conn, dest_id, name="My Test 2", enabled=False)
-        d2 = await q.get_destination(conn, dest_id)
+        await _update_destination(conn, dest_id, name="My Test 2", enabled=False)
+        d2 = await _get_destination(conn, dest_id)
         assert d2 is not None
         assert d2.name == "My Test 2"
         assert d2.enabled is False
 
-        await q.delete_destination(conn, dest_id)
-        assert await q.get_destination(conn, dest_id) is None
+        await _delete_destination(conn, dest_id)
+        assert await _get_destination(conn, dest_id) is None
 
 
 @pytest.mark.asyncio
 async def test_reorder_destinations(tmp_path):
     async with open_db(tmp_path / "x.db") as conn:
-        dests = await q.list_destinations(conn)
+        dests = await _list_destinations(conn)
         ids = [d.id for d in dests]
         reversed_ids = list(reversed(ids))
-        await q.reorder_destinations(conn, reversed_ids)
-        d2 = await q.list_destinations(conn)
+        await _reorder_destinations(conn, reversed_ids)
+        d2 = await _list_destinations(conn)
         assert [d.id for d in d2] == reversed_ids
 
 
 @pytest.mark.asyncio
 async def test_raw_pings_insert_list_count(tmp_path):
     async with open_db(tmp_path / "x.db") as conn:
-        dests = await q.list_destinations(conn)
+        dests = await _list_destinations(conn)
         dest_id = dests[0].id
         now = _now_ms()
         samples = [
@@ -114,7 +131,7 @@ async def test_raw_pings_insert_list_count(tmp_path):
         ]
         await q.insert_raw_pings(conn, samples)
 
-        rows = await q.list_raw_pings(
+        rows = await _list_raw_pings(
             conn, dest_id, since_ms=now - 10_000, until_ms=now + 1, limit=100
         )
         assert len(rows) == 3
@@ -125,7 +142,7 @@ async def test_raw_pings_insert_list_count(tmp_path):
         assert counts["ok"] == 2
 
         # filter by status
-        only_loss = await q.list_raw_pings(
+        only_loss = await _list_raw_pings(
             conn,
             dest_id,
             since_ms=now - 10_000,
@@ -143,7 +160,7 @@ async def test_raw_pings_insert_list_count(tmp_path):
 @pytest.mark.asyncio
 async def test_outages_lifecycle(tmp_path):
     async with open_db(tmp_path / "x.db") as conn:
-        dests = await q.list_destinations(conn)
+        dests = await _list_destinations(conn)
         dest_id = dests[0].id
         start = _now_ms()
         outage_id = await q.open_outage(
@@ -175,7 +192,7 @@ async def test_outages_lifecycle(tmp_path):
         total_ms = await q.total_outage_ms(conn, None, start - 1, start + 10_000)
         assert total_ms == 4000
 
-        listed = await q.list_outages(
+        listed = await _list_outages(
             conn, since_ms=start - 1, until_ms=start + 10_000, types={OutageType.MULTI}
         )
         assert len(listed) == 1
@@ -184,7 +201,7 @@ async def test_outages_lifecycle(tmp_path):
 @pytest.mark.asyncio
 async def test_hourly_and_daily_aggregates(tmp_path):
     async with open_db(tmp_path / "x.db") as conn:
-        dests = await q.list_destinations(conn)
+        dests = await _list_destinations(conn)
         dest_id = dests[0].id
         hour_bucket = (_now_ms() // 3_600_000) * 3_600_000
         await q.upsert_hourly_aggregate(
@@ -247,7 +264,7 @@ async def test_hourly_and_daily_aggregates(tmp_path):
 @pytest.mark.asyncio
 async def test_traceroute_insert_and_hops(tmp_path):
     async with open_db(tmp_path / "x.db") as conn:
-        dests = await q.list_destinations(conn)
+        dests = await _list_destinations(conn)
         dest_id = dests[0].id
         ts = _now_ms()
         hops = [

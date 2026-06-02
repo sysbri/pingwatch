@@ -3,13 +3,18 @@
 All public names from the domain modules are re-exported here so that both
 ``from pingwatch.db import queries as q; q.foo(...)`` and
 ``from pingwatch.db.queries import foo`` continue to work unchanged.
+
+The HTTP-layer helpers in ``q_compat`` are imported last so that names shared
+with the domain modules (``list_destinations``, ``get_destination``,
+``list_outages``, ``get_outage``, ``list_raw_pings``, ``update_destination``,
+``delete_destination``) resolve to the richer dict/tuple-returning compat
+versions that the API routes expect.  Internal callers that need the
+domain-typed ``Destination`` objects should import directly from
+``pingwatch.db.q_destinations``.
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001
 
-# Expose the private _now_ms helper that existing code in other modules may
-# rely on via ``from pingwatch.db.queries import _now_ms`` (unlikely but
-# kept for safety).
 from .q_aggregates import (
     _DAILY_COLS,
     _HOURLY_COLS,
@@ -22,20 +27,13 @@ from .q_aggregates import (
 from .q_destinations import (
     _DEST_UPDATABLE,
     _row_to_destination,
-    delete_destination,
-    get_destination,
     insert_destination,
-    list_destinations,
-    reorder_destinations,
-    update_destination,
 )
 from .q_outages import (
     add_outage_member,
     close_outage,
     count_outages,
-    get_outage,
     get_outage_members,
-    list_outages,
     open_outage,
     open_outages,
     total_outage_ms,
@@ -47,7 +45,6 @@ from .q_pings import (
     insert_raw_pings,
     insert_raw_pings_with_flags,
     latest_pings,
-    list_raw_pings,
     sparkline_pings,
 )
 from .q_settings import (
@@ -96,24 +93,65 @@ from .q_wifi import (
     rssi_series,
 )
 
+# HTTP-layer compat: imported last so their names shadow the domain versions
+# where signatures differ (e.g. list_destinations returns list[dict] here).
+from .q_compat import (
+    _coerce,
+    _detect_type,
+    _stringify,
+    create_destination,
+    db_size_bytes,
+    delete_destination,
+    dest_kpis,
+    factory_reset,
+    get_all_settings,
+    get_destination,
+    get_outage,
+    get_trace,
+    hero_stats,
+    hourly_aggregates_for,
+    latency_sparkline,
+    latest_traces_per_dest,
+    list_destinations,
+    list_outages,
+    list_raw_pings,
+    list_traces,
+    outages_today_for_dest,
+    purge_all_metrics,
+    recent_events,
+    reorder_destinations,
+    reset_destination_data,
+    set_settings,
+    stream_summary,
+    update_destination,
+    wifi_current,
+)
+
 __all__ = [
-    # destinations
+    # destinations (compat / dict-returning versions)
     "_DEST_UPDATABLE",
     "_row_to_destination",
+    "create_destination",
     "delete_destination",
     "get_destination",
     "insert_destination",
     "list_destinations",
     "reorder_destinations",
+    "reset_destination_data",
     "update_destination",
     # settings
     "_cast_setting",
+    "_coerce",
+    "_detect_type",
     "_infer_value_type",
     "_now_ms",
+    "_stringify",
+    "get_all_settings",
     "get_setting",
     "get_setting_typed",
     "list_settings",
     "set_setting",
+    "set_settings",
     # pings
     "_PingStatus",
     "count_raw_pings",
@@ -125,6 +163,7 @@ __all__ = [
     # aggregates
     "_DAILY_COLS",
     "_HOURLY_COLS",
+    "hourly_aggregates_for",
     "list_daily_aggregates",
     "list_hourly_aggregates",
     "latest_finalized_hour",
@@ -139,13 +178,17 @@ __all__ = [
     "list_outages",
     "open_outage",
     "open_outages",
+    "outages_today_for_dest",
     "total_outage_ms",
     "update_outage_type",
     # traces
+    "get_trace",
     "get_trace_hops",
     "get_traceroute",
     "hop_history",
     "insert_traceroute",
+    "latest_traces_per_dest",
+    "list_traces",
     "list_traceroutes",
     "upsert_route_signature",
     # wifi
@@ -154,6 +197,7 @@ __all__ = [
     "latest_rssi",
     "list_wifi_events",
     "rssi_series",
+    "wifi_current",
     # stream + heartbeat + notifications
     "bytes_today",
     "insert_heartbeat_event",
@@ -173,4 +217,13 @@ __all__ = [
     "speedtest_last",
     "update_speedtest_done",
     "update_speedtest_failed",
+    # dashboard
+    "db_size_bytes",
+    "dest_kpis",
+    "hero_stats",
+    "latency_sparkline",
+    "purge_all_metrics",
+    "factory_reset",
+    "recent_events",
+    "stream_summary",
 ]

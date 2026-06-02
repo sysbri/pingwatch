@@ -12,6 +12,7 @@ import structlog
 
 from ..bus import Bus, get_bus
 from ..db import queries as q
+from ..db.q_destinations import list_destinations as _list_destinations_typed
 from ..metrics._math import hour_bucket_ms as _hour_bucket_fn
 from ..metrics._math import percentile as _percentile_fn
 from ..models import FLAG_SPIKE, PingSample
@@ -121,7 +122,7 @@ class HourlyRollupWorker:
         await self._flush(finalize_old=True)
 
     async def _boot_recovery(self) -> None:
-        dests = await q.list_destinations(self.conn, enabled_only=False)
+        dests = await _list_destinations_typed(self.conn, enabled_only=False)
         now = int(time.time() * 1000)
         cur_hour = _hour_bucket(now)
         for d in dests:
@@ -201,7 +202,7 @@ class HourlyRollupWorker:
         yesterday_start = today_start_local - timedelta(days=1)
         ystart_ms = int(yesterday_start.timestamp() * 1000)
         yend_ms = today_start_ms
-        dests = await q.list_destinations(self.conn, enabled_only=False)
+        dests = await _list_destinations_typed(self.conn, enabled_only=False)
         for d in dests:
             hourly = await q.list_hourly_aggregates(self.conn, d.id, ystart_ms, yend_ms)
             if not hourly:

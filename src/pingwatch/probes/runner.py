@@ -8,7 +8,7 @@ import aiosqlite
 import structlog
 
 from ..bus import Bus, get_bus
-from ..db import queries as q
+from ..db.q_destinations import list_destinations as _list_destinations_typed
 from ..models import Destination, PingSample, ProbeType
 from .base import Probe
 from .dns_query import DnsQueryProbe
@@ -61,7 +61,7 @@ class ProbeRunner:
         self._dests.clear()
 
     async def _reload(self) -> None:
-        dests = await q.list_destinations(self.conn, enabled_only=True)
+        dests = await _list_destinations_typed(self.conn, enabled_only=True)
         new_ids = {d.id for d in dests}
 
         # Cancel tasks for removed/changed dests.

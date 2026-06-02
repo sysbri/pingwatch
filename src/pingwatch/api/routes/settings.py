@@ -6,10 +6,10 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from pingwatch.api import _queries_compat as q
 from pingwatch.api.deps import ConnDep
 from pingwatch.api.schemas import OkResponse
 from pingwatch.bus import get_bus
+from pingwatch.db import queries as q
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 

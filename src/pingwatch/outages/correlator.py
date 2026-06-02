@@ -21,6 +21,7 @@ import structlog
 
 from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
+from pingwatch.db.q_destinations import list_destinations as _list_destinations_typed
 from pingwatch.models import DestKind, OutageOpened, OutageType
 from pingwatch.outages.classifier import (
     _outages_overlapping,
@@ -181,7 +182,7 @@ class Correlator:
         center_ts_ms: int,
         window_ms: int,
     ) -> bool:
-        destinations = await queries.list_destinations(self._conn, enabled_only=True)
+        destinations = await _list_destinations_typed(self._conn, enabled_only=True)
         externals = [d for d in destinations if d.kind == DestKind.EXTERNAL]
         gateways = [d for d in destinations if d.kind == DestKind.GATEWAY]
         if len(externals) < self._cfg.uplink_min_externals:
