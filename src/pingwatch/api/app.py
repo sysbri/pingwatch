@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -102,9 +103,44 @@ def build_app(*, db_path: str | None = None) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    # Boot-Timestamp fuer Liveness-Check (Probes brauchen Anlauf nach Cold-Start)
+    app.state.boot_ts_ms = int(time.time() * 1000)
+
     @app.get("/healthz", response_class=JSONResponse)
-    async def healthz() -> dict[str, str]:
-        return {"status": "ok"}
+    async def healthz() -> JSONResponse:
+        """Healthz prueft nicht nur HTTP sondern auch ob die Probe-Pipeline
+        tatsaechlich Daten schreibt. Wenn der Container > 3 min hochlaeuft
+        und in den letzten 3 min KEINE raw_pings angekommen sind, gilt das
+        als unhealthy -> docker compose restart greift.
+        """
+        from time import time as _t
+        now_ms = int(_t() * 1000)
+        uptime_ms = now_ms - app.state.boot_ts_ms
+        # Anlauf-Periode: erste 180s sind wir immer ok
+        if uptime_ms < 180_000:
+            return JSONResponse({"status": "ok", "phase": "warmup", "uptime_s": uptime_ms // 1000})
+        # Liveness: pruefe ob in den letzten 3 min raw_pings angekommen sind
+        try:
+            db_obj = app.state.db
+            conn = getattr(db_obj, "conn", db_obj)
+            cur = await conn.execute(
+                "SELECT COUNT(*) AS n FROM raw_pings WHERE ts_ms >= ?",
+                (now_ms - 180_000,),
+            )
+            row = await cur.fetchone()
+            recent = int(row["n"] or 0) if row else 0
+            if recent == 0:
+                log.error("healthz.no_recent_pings", uptime_s=uptime_ms // 1000)
+                return JSONResponse(
+                    {"status": "unhealthy", "reason": "no raw_pings in last 180s",
+                     "uptime_s": uptime_ms // 1000},
+                    status_code=503,
+                )
+            return JSONResponse({"status": "ok", "recent_pings": recent,
+                                 "uptime_s": uptime_ms // 1000})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("healthz.db_check_failed", error=repr(exc))
+            return JSONResponse({"status": "ok", "phase": "db-degraded"})
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:

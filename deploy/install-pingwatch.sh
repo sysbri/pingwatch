@@ -180,6 +180,17 @@ if [ -f "${DEPLOY_DIR}/pingwatch-source-watcher.service" ]; then
   systemctl enable --now pingwatch-source-watcher.service
 fi
 
+# ---- 9d. External watchdog: verifies container + ping freshness ----
+if [ -f "${DEPLOY_DIR}/pingwatch-watchdog.service" ]; then
+  apt-get install -y --no-install-recommends sqlite3
+  install -m 0755 "${DEPLOY_DIR}/pingwatch-watchdog.sh" /usr/local/bin/pingwatch-watchdog.sh
+  install -m 0644 "${DEPLOY_DIR}/pingwatch-watchdog.service" /etc/systemd/system/pingwatch-watchdog.service
+  install -m 0644 "${DEPLOY_DIR}/pingwatch-watchdog.timer" /etc/systemd/system/pingwatch-watchdog.timer
+  install -d -m 0755 /var/lib/pingwatch-watchdog
+  systemctl daemon-reload
+  systemctl enable --now pingwatch-watchdog.timer
+fi
+
 # ---- 10. Compose system unit ----
 install -m 0644 "${DEPLOY_DIR}/pingwatch.service" /etc/systemd/system/pingwatch.service
 systemctl daemon-reload

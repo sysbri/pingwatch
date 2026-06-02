@@ -1,0 +1,9 @@
+[Unit]
+Description=PingWatch external watchdog (one-shot, fired by timer)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pingwatch-watchdog.sh
+User=root

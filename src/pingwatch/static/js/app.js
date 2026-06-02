@@ -54,6 +54,7 @@ function pingwatch() {
       rawPings: [],
       pingStatuses: [],
       pingSearch: '',
+      wifi_overview: null,
     },
     settings: {},
     targets: [],
@@ -138,6 +139,7 @@ function pingwatch() {
 
     switchTab(name) {
       this.detail.tab = name;
+      if (this.detail.key === 'wifi') { this.loadWifiOverview(); return; }
       if (name === 'uebersicht') this.loadOverview();
       if (name === 'aussetzer') this.loadOutages();
       if (name === 'trace') this.loadTraces();
@@ -155,7 +157,11 @@ function pingwatch() {
       if (name === 'wlan') this.loadWifiStatus();
     },
 
-    setRange(r) { this.detail.range = r; this.loadOverview(); },
+    setRange(r) {
+      this.detail.range = r;
+      if (this.detail.key === 'wifi') { this.loadWifiOverview(); return; }
+      this.loadOverview();
+    },
 
     // ---------- dashboard ----------
     async fetchDashboard() {
@@ -271,6 +277,32 @@ function pingwatch() {
         );
       };
       if (lc.clientWidth === 0 || lc.clientHeight === 0) {
+        requestAnimationFrame(() => requestAnimationFrame(init));
+      } else {
+        init();
+      }
+    },
+
+    async loadWifiOverview() {
+      try {
+        const r = await fetch('/api/wifi/overview?range=' + this.detail.range);
+        if (r.ok) this.detail.wifi_overview = await r.json();
+      } catch (e) { console.warn('wifi overview fetch failed', e); }
+      this.$nextTick(() => this._renderRssiChart());
+    },
+
+    _renderRssiChart() {
+      const cv = document.getElementById('detail-rssi-canvas');
+      if (!cv || !window.PingWatchCharts || !this.detail.wifi_overview) return;
+      try {
+        if (this._rssiChart && this._rssiChart.destroy) this._rssiChart.destroy();
+      } catch (e) { /* */ }
+      this._rssiChart = null;
+      const init = () => {
+        const fn = (window.PingWatchCharts.rssiChart || window.PingWatchCharts.latencyChart);
+        this._rssiChart = fn(cv, this.detail.wifi_overview.series || []);
+      };
+      if (cv.clientWidth === 0 || cv.clientHeight === 0) {
         requestAnimationFrame(() => requestAnimationFrame(init));
       } else {
         init();

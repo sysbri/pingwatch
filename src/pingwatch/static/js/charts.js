@@ -163,5 +163,82 @@
     });
   }
 
-  global.PingWatchCharts = { latencyChart, histogramChart, streamThroughputChart };
+  function rssiChart(canvas, dataPoints) {
+    const C = _maybeChart();
+    if (!C || !canvas) return null;
+    const fmtTime = (ts) => {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const pad = (n) => String(n).padStart(2, '0');
+      return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    };
+    const pts = dataPoints || [];
+    return new C(canvas, {
+      type: 'line',
+      data: {
+        labels: pts.map((p) => p.ts_ms || p.ts || p.x || ''),
+        datasets: [
+          {
+            label: 'RSSI',
+            data: pts.map((p) => (p.rssi != null ? p.rssi : null)),
+            borderColor: '#fbbf24',
+            backgroundColor: 'rgba(251,191,36,0.10)',
+            borderWidth: 1.5,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#fbbf24',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2,
+            fill: true,
+            spanGaps: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false, axis: 'x' },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            mode: 'index',
+            intersect: false,
+            backgroundColor: 'rgba(15,22,32,0.95)',
+            titleColor: '#ffffff',
+            bodyColor: '#e5e7eb',
+            borderColor: '#374151',
+            borderWidth: 1,
+            padding: 10,
+            titleFont: { size: 13, weight: '600' },
+            bodyFont: { size: 13 },
+            displayColors: false,
+            callbacks: {
+              title: (items) => {
+                if (!items || !items.length) return '';
+                return fmtTime(Number(items[0].label));
+              },
+              label: (item) => {
+                const v = item.parsed.y;
+                if (v == null) return 'kein Sample';
+                return 'RSSI: ' + v + ' dBm';
+              },
+            },
+          },
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            min: -100, max: -30,
+            ticks: { color: '#6b7280', font: { size: 10 }, callback: (v) => v + ' dBm' },
+            grid: { color: '#1f2937' },
+          },
+        },
+      },
+    });
+  }
+
+  global.PingWatchCharts = { latencyChart, histogramChart, streamThroughputChart, rssiChart };
 })(window);

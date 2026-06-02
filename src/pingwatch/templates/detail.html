@@ -18,25 +18,35 @@
   </div>
 </div>
 
-<div class="det-tabs">
-  <div class="tab" :class="{ active: detail.tab === 'uebersicht' }" @click="switchTab('uebersicht')" data-tab="uebersicht">Übersicht</div>
-  <div class="tab" :class="{ active: detail.tab === 'aussetzer' }" @click="switchTab('aussetzer')" data-tab="aussetzer">
-    Aussetzer
-    <span class="ct" x-text="(detail.outages && detail.outages.length) || 0" x-show="detail.outages && detail.outages.length"></span>
+<template x-if="detail.key === 'wifi'">
+  <div class="det-tab-content active" data-tab-content="wifi">
+    {% include "detail/wifi.html" %}
   </div>
-  <div class="tab" :class="{ active: detail.tab === 'trace' }" @click="switchTab('trace')" data-tab="trace">Traceroute-Verlauf</div>
-  <div class="tab" :class="{ active: detail.tab === 'roh' }" @click="switchTab('roh')" data-tab="roh">Roh-Pings</div>
-</div>
+</template>
 
-<div class="det-tab-content" :class="{ active: detail.tab === 'uebersicht' }" data-tab-content="uebersicht">
-  {% include "detail/uebersicht.html" %}
-</div>
-<div class="det-tab-content" :class="{ active: detail.tab === 'aussetzer' }" data-tab-content="aussetzer">
-  {% include "detail/aussetzer.html" %}
-</div>
-<div class="det-tab-content" :class="{ active: detail.tab === 'trace' }" data-tab-content="trace">
-  {% include "detail/trace.html" %}
-</div>
-<div class="det-tab-content" :class="{ active: detail.tab === 'roh' }" data-tab-content="roh">
-  {% include "detail/roh.html" %}
-</div>
+<template x-if="detail.key !== 'wifi'">
+  <div>
+    <div class="det-tabs">
+      <div class="tab" :class="{ active: detail.tab === 'uebersicht' }" @click="switchTab('uebersicht')" data-tab="uebersicht">Übersicht</div>
+      <div class="tab" :class="{ active: detail.tab === 'aussetzer' }" @click="switchTab('aussetzer')" data-tab="aussetzer">
+        Aussetzer
+        <span class="ct" x-text="(detail.outages && detail.outages.length) || 0" x-show="detail.outages && detail.outages.length"></span>
+      </div>
+      <div class="tab" :class="{ active: detail.tab === 'trace' }" @click="switchTab('trace')" data-tab="trace">Traceroute-Verlauf</div>
+      <div class="tab" :class="{ active: detail.tab === 'roh' }" @click="switchTab('roh')" data-tab="roh">Roh-Pings</div>
+    </div>
+
+    <div class="det-tab-content" :class="{ active: detail.tab === 'uebersicht' }" data-tab-content="uebersicht">
+      {% include "detail/uebersicht.html" %}
+    </div>
+    <div class="det-tab-content" :class="{ active: detail.tab === 'aussetzer' }" data-tab-content="aussetzer">
+      {% include "detail/aussetzer.html" %}
+    </div>
+    <div class="det-tab-content" :class="{ active: detail.tab === 'trace' }" data-tab-content="trace">
+      {% include "detail/trace.html" %}
+    </div>
+    <div class="det-tab-content" :class="{ active: detail.tab === 'roh' }" data-tab-content="roh">
+      {% include "detail/roh.html" %}
+    </div>
+  </div>
+</template>

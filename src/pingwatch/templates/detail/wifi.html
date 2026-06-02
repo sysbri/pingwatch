@@ -1,0 +1,103 @@
+{# WLAN-Detail — KPI strip + RSSI chart + events + AP list. #}
+<div class="kpi-strip">
+  <div class="kpi"><div class="l">RSSI Ø</div><div class="v" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.rssi_mean != null) ? Math.round(detail.wifi_overview.kpi.rssi_mean) + ' dBm' : '—'"></div></div>
+  <div class="kpi"><div class="l">RSSI min</div><div class="v red" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.rssi_min != null) ? detail.wifi_overview.kpi.rssi_min + ' dBm' : '—'"></div></div>
+  <div class="kpi"><div class="l">RSSI max</div><div class="v green" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.rssi_max != null) ? detail.wifi_overview.kpi.rssi_max + ' dBm' : '—'"></div></div>
+  <div class="kpi"><div class="l">Signal</div><div class="v" x-text="(detail.wifi_overview && detail.wifi_overview.current && detail.wifi_overview.current.signal_pct != null) ? detail.wifi_overview.current.signal_pct + ' %' : '—'"></div></div>
+  <div class="kpi"><div class="l">Bitrate</div><div class="v" x-text="(detail.wifi_overview && detail.wifi_overview.current && detail.wifi_overview.current.bitrate_mbps != null) ? detail.wifi_overview.current.bitrate_mbps + ' Mb/s' : '—'"></div></div>
+  <div class="kpi"><div class="l">Channel</div><div class="v" x-text="(detail.wifi_overview && detail.wifi_overview.current && detail.wifi_overview.current.channel != null) ? detail.wifi_overview.current.channel : '—'"></div></div>
+  <div class="kpi"><div class="l">Frequenz</div><div class="v" x-text="(detail.wifi_overview && detail.wifi_overview.current && detail.wifi_overview.current.freq_mhz != null) ? detail.wifi_overview.current.freq_mhz + ' MHz' : '—'"></div></div>
+</div>
+
+<div class="det-main">
+  <div class="chart-panel">
+    <div class="chart-head">
+      <div class="pt">RSSI · <span x-text="detail.range"></span></div>
+      <div class="range">
+        <button type="button" :class="{ active: detail.range === '1h' }" @click.prevent="setRange('1h')">1h</button>
+        <button type="button" :class="{ active: detail.range === '24h' }" @click.prevent="setRange('24h')">24h</button>
+        <button type="button" :class="{ active: detail.range === '7d' }" @click.prevent="setRange('7d')">7d</button>
+      </div>
+    </div>
+    <div class="chart-area">
+      <canvas id="detail-rssi-canvas"></canvas>
+    </div>
+    <div class="chart-legend">
+      <div class="lg"><span class="ln" style="background:#fbbf24"></span>RSSI (dBm)</div>
+    </div>
+  </div>
+
+  <div class="right-stack">
+    <div class="stat-panel">
+      <div class="pt">Ereignis-Statistik</div>
+      <div class="perc-rows">
+        <div class="perc-row"><div class="lbl">Disconnects</div><div class="val" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.disconnects_count) || 0"></div></div>
+        <div class="perc-row"><div class="lbl">Reassocs</div><div class="val" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.reassocs_count) || 0"></div></div>
+        <div class="perc-row"><div class="lbl">Channel-Changes</div><div class="val" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.channel_changes_count) || 0"></div></div>
+        <div class="perc-row"><div class="lbl">SSID-Changes</div><div class="val" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.ssid_changes_count) || 0"></div></div>
+        <div class="perc-row"><div class="lbl">Samples</div><div class="val" x-text="(detail.wifi_overview && detail.wifi_overview.kpi && detail.wifi_overview.kpi.samples_count) || 0"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="det-bottom det-bottom--3col">
+  <div class="ping-log">
+    <div class="ph"><div class="pt">Live-Status</div><div class="live-tag" x-show="detail.wifi_overview && detail.wifi_overview.current && detail.wifi_overview.current.connected">LIVE</div></div>
+    <div class="ping-stream">
+      <template x-if="detail.wifi_overview && detail.wifi_overview.current">
+        <div>
+          <div><span class="t">SSID</span><span class="ok" x-text="detail.wifi_overview.current.ssid || '—'"></span></div>
+          <div><span class="t">BSSID</span><span x-text="detail.wifi_overview.current.bssid || '—'"></span></div>
+          <div><span class="t">RSSI</span><span x-text="(detail.wifi_overview.current.rssi_dbm != null ? detail.wifi_overview.current.rssi_dbm + ' dBm' : '—')"></span></div>
+          <div><span class="t">Bitrate</span><span x-text="(detail.wifi_overview.current.bitrate_mbps != null ? detail.wifi_overview.current.bitrate_mbps + ' Mb/s' : '—')"></span></div>
+          <div><span class="t">Channel</span><span x-text="(detail.wifi_overview.current.channel != null ? detail.wifi_overview.current.channel : '—')"></span></div>
+          <div><span class="t">Freq</span><span x-text="(detail.wifi_overview.current.freq_mhz != null ? detail.wifi_overview.current.freq_mhz + ' MHz' : '—')"></span></div>
+          <div><span class="t">Security</span><span x-text="detail.wifi_overview.current.security || '—'"></span></div>
+          <div><span class="t">Status</span><span :class="detail.wifi_overview.current.connected ? 'ok' : 'fail'" x-text="detail.wifi_overview.current.connected ? 'verbunden' : 'getrennt'"></span></div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="pw-panel">
+    <div class="ph"><div class="pt">Event-Log</div><div class="pr" x-text="((detail.wifi_overview && detail.wifi_overview.events) || []).length + ' Ereignisse'"></div></div>
+    <div class="pb">
+      <template x-if="detail.wifi_overview && detail.wifi_overview.events && detail.wifi_overview.events.length">
+        <div class="ping-stream">
+          <template x-for="ev in (detail.wifi_overview.events || [])" :key="ev.id">
+            <div>
+              <span class="t" x-text="formatTime(ev.ts_ms)"></span>
+              <span :class="(ev.event_type === 'disconnect' ? 'fail' : 'ok')" x-text="ev.event_type"></span>
+              <span x-text="(ev.ssid || ev.bssid || '') + (ev.rssi != null ? ' · ' + ev.rssi + ' dBm' : '') + (ev.channel != null ? ' · ch ' + ev.channel : '')"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!detail.wifi_overview || !detail.wifi_overview.events || !detail.wifi_overview.events.length">
+        <div style="font-size:11px;color:#6b7280;font-style:italic;padding:20px 0;text-align:center">keine Ereignisse im Fenster</div>
+      </template>
+    </div>
+  </div>
+
+  <div class="pw-panel">
+    <div class="ph"><div class="pt">Sichtbare APs</div><div class="pr" x-text="((detail.wifi_overview && detail.wifi_overview.aps) || []).length + ' BSSIDs'"></div></div>
+    <div class="pb">
+      <template x-if="detail.wifi_overview && detail.wifi_overview.aps && detail.wifi_overview.aps.length">
+        <div class="wifi-ap-list">
+          <template x-for="ap in (detail.wifi_overview.aps || [])" :key="ap.bssid">
+            <div class="wifi-ap-row">
+              <div class="ap-ssid" x-text="ap.ssid || '(hidden)'"></div>
+              <div class="ap-bssid" x-text="ap.bssid"></div>
+              <div class="ap-rssi" x-text="(ap.avg_rssi != null ? Math.round(ap.avg_rssi) + ' dBm' : '—')"></div>
+              <div class="ap-seen" x-text="ap.seen_count + 'x'"></div>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!detail.wifi_overview || !detail.wifi_overview.aps || !detail.wifi_overview.aps.length">
+        <div style="font-size:11px;color:#6b7280;font-style:italic;padding:20px 0;text-align:center">keine APs im Fenster</div>
+      </template>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PingWatch watchdog every 60s
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=pingwatch-watchdog.service
+
+[Install]
+WantedBy=timers.target

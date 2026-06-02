@@ -2002,3 +2002,25 @@ body .pw[data-theme="light"] .wifi-modal-card { background: #ffffff !important; 
 body .pw[data-theme="light"] .wifi-modal-card h4 { color: #1d1d1f !important; }
 body .pw[data-theme="light"] .wifi-modal-sec { color: #6e6e73 !important; }
 body .pw[data-theme="light"] .set-btn-ghost { border-color: #d2d2d7 !important; color: #1d1d1f !important; }
+
+/* WLAN-Detail: AP-Liste */
+.wifi-ap-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+.wifi-ap-row {
+  display: grid;
+  grid-template-columns: 1fr 140px 70px 40px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.wifi-ap-row .ap-ssid { color: #e5e7eb; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wifi-ap-row .ap-bssid { color: #6b7280; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 10px; }
+.wifi-ap-row .ap-rssi { color: #fbbf24; text-align: right; }
+.wifi-ap-row .ap-seen { color: #6b7280; text-align: right; }
+body .pw[data-theme="light"] .wifi-ap-row { background: #f5f5f7 !important; border-color: #e5e5e7 !important; }
+body .pw[data-theme="light"] .wifi-ap-row .ap-ssid { color: #1d1d1f !important; }
+body .pw[data-theme="light"] .wifi-ap-row .ap-bssid { color: #6e6e73 !important; }
+body .pw[data-theme="light"] .wifi-ap-row .ap-seen { color: #6e6e73 !important; }
