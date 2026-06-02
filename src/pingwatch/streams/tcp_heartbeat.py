@@ -30,9 +30,9 @@ log = structlog.get_logger(__name__)
 @dataclass(slots=True)
 class HeartbeatConfig:
     target: str = "1.1.1.1:443"
-    interval_ms: int = 200
-    miss_threshold_ms: int = 800
-    connect_timeout_s: float = 5.0
+    interval_ms: int = 1000        # one connect/sec — frequent enough for liveness,
+    miss_threshold_ms: int = 3000  # gentle enough not to get SYN-throttled by the peer
+    connect_timeout_s: float = 4.0
 
 
 class TcpHeartbeatWorker:
