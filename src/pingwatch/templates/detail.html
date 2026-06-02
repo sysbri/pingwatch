@@ -25,7 +25,7 @@
 </template>
 
 <template x-if="detail.key !== 'wifi'">
-  <div>
+  <div class="det-tabwrap">
     <div class="det-tabs">
       <div class="tab" :class="{ active: detail.tab === 'uebersicht' }" @click="switchTab('uebersicht')" data-tab="uebersicht">Übersicht</div>
       <div class="tab" :class="{ active: detail.tab === 'aussetzer' }" @click="switchTab('aussetzer')" data-tab="aussetzer">

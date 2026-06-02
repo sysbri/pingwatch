@@ -841,6 +841,10 @@
 
 /* Detail-View: Tab-Inhalte nutzen die volle Höhe */
 .det-tab-content { flex: 1 1 0 !important; min-height: 0 !important; }
+/* Non-wifi tabs sit inside an extra wrapper div; it must be a flex column so
+   the active .det-tab-content (and its .det-main, flex:1) fills the height
+   instead of collapsing -- otherwise the bottom cards slide into the middle. */
+.det-tabwrap { display: flex !important; flex-direction: column !important; flex: 1 1 0 !important; min-height: 0 !important; }
 .det-main { flex: 1 1 0 !important; min-height: 0 !important; }
 .chart-panel { flex: 1 1 0 !important; min-height: 0 !important; }
 .ot-detail { flex: 1 1 0 !important; min-height: 0 !important; }
