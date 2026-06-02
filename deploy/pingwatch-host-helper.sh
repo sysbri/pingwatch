@@ -11,6 +11,87 @@ FIFO="/run/pingwatch-host.fifo"
 
 log() { logger -t pingwatch-host-helper "$*"; }
 
+WLAN_IF="${PINGWATCH_WLAN_IF:-wlan0}"
+SHARED_DIR="/run/pingwatch-shared"
+
+get_security() {
+  # Security of the in-use AP (e.g. WPA2). Best-effort; nmcli only.
+  nmcli -t -f IN-USE,SECURITY dev wifi 2>/dev/null \
+    | awk -F: '$1=="*"{print $2; exit}'
+}
+
+write_wifi_status() {
+  # Render the current association to wifi-status.json. Everything but the
+  # security string comes from a single `iw link` call. Written to a unique
+  # temp file and atomically renamed so readers never see a partial JSON.
+  local security="${1:-}"
+  local link tmp
+  link=$(iw dev "$WLAN_IF" link 2>/dev/null || true)
+  tmp=$(mktemp "${SHARED_DIR}/.wifi-status.XXXXXX" 2>/dev/null) || return 0
+  python3 - "$link" "$security" > "$tmp" <<'PY'
+import json, time, sys, re
+link = sys.argv[1] if len(sys.argv) > 1 else ''
+security = sys.argv[2] if len(sys.argv) > 2 else ''
+connected = 'Connected to' in link
+
+def find(rx, cast=str):
+  m = re.search(rx, link)
+  if not m:
+    return None
+  try:
+    return cast(m.group(1))
+  except (TypeError, ValueError):
+    return None
+
+def freq_to_chan(f):
+  if f is None: return None
+  if 2412 <= f <= 2472: return (f - 2407) // 5
+  if f == 2484: return 14
+  if 5180 <= f <= 5825: return (f - 5000) // 5
+  if 5955 <= f <= 7115: return (f - 5950) // 5
+  return None
+
+ssid = find(r'SSID:\s*(.+)')
+rssi = find(r'signal:\s*(-?\d+)', int)
+freq = find(r'freq:\s*(\d+)', int)
+pct = max(0, min(100, int(2 * (rssi + 100)))) if rssi is not None else None
+print(json.dumps({
+  'ts_ms': int(time.time() * 1000),
+  'connected': connected,
+  'ssid': ssid.strip() if ssid else None,
+  'bssid': find(r'Connected to ([0-9a-fA-F:]+)'),
+  'rssi_dbm': rssi,
+  'signal_pct': pct,
+  'bitrate_mbps': find(r'tx bitrate:\s*([\d.]+)', float),
+  'freq': freq,
+  'channel': freq_to_chan(freq),
+  'security': security or None,
+}))
+PY
+  chmod 644 "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "${SHARED_DIR}/wifi-status.json" 2>/dev/null || rm -f "$tmp"
+}
+
+wifi_status_loop() {
+  # ~1 Hz background refresh so the in-container monitor and the Live-Status UI
+  # always have fresh association data, without anyone poking the FIFO. nmcli
+  # (security) is heavier and rarely changes, so refresh it only every ~15 s.
+  local i=0 security=""
+  while true; do
+    if [ $(( i % 15 )) -eq 0 ]; then
+      security=$(get_security)
+    fi
+    i=$(( i + 1 ))
+    write_wifi_status "$security"
+    sleep 1
+  done
+}
+
+mkdir -p "$SHARED_DIR" 2>/dev/null || true
+wifi_status_loop &
+WIFI_LOOP_PID=$!
+trap 'kill "$WIFI_LOOP_PID" 2>/dev/null || true' EXIT
+
 while true; do
   # Block-read one line at a time. The `cat` reopens the FIFO when writers close.
   while IFS=$'\t' read -r cmd payload; do
@@ -87,31 +168,7 @@ PY
         ;;
       wifi_status)
         log "wifi_status"
-        ssid=$(nmcli -t -f NAME,TYPE,DEVICE c show --active 2>/dev/null | awk -F: '$2=="802-11-wireless"{print $1; exit}')
-        link=$(iw dev wlan0 link 2>/dev/null || true)
-        python3 - "$ssid" "$link" <<'PY' > /run/pingwatch-shared/wifi-status.json
-import json, time, sys, re
-ssid = sys.argv[1] if len(sys.argv) > 1 else ''
-link = sys.argv[2] if len(sys.argv) > 2 else ''
-m_sig = re.search(r'signal:\s*(-?\d+)', link)
-m_bit = re.search(r'tx bitrate:\s*([\d.]+)', link)
-m_freq = re.search(r'freq:\s*(\d+)', link)
-rssi = int(m_sig.group(1)) if m_sig else None
-# RSSI -> percent (rough): -50 dBm = 100%, -100 dBm = 0%
-pct = None
-if rssi is not None:
-  pct = max(0, min(100, int(2 * (rssi + 100))))
-print(json.dumps({
-  'ts_ms': int(time.time()*1000),
-  'connected': bool(ssid),
-  'ssid': ssid or None,
-  'signal_pct': pct,
-  'rssi_dbm': rssi,
-  'bitrate_mbps': float(m_bit.group(1)) if m_bit else None,
-  'freq': int(m_freq.group(1)) if m_freq else None,
-}))
-PY
-        chmod 644 /run/pingwatch-shared/wifi-status.json || true
+        write_wifi_status "$(get_security)"
         ;;
       wifi_connect)
         # payload format: "SSID\tPASSWORD" (password may be empty for open WLAN)

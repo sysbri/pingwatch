@@ -1,20 +1,34 @@
-"""1 Hz WiFi monitor with pyroute2 primary path and ``iw`` subprocess fallback.
+"""1 Hz WiFi monitor.
 
 Each tick we read the current association (SSID, BSSID, RSSI, channel,
 link-rate) and store it as a snapshot. Snapshots are diffed via
-``wifi.events`` to produce discrete WifiEvents. An ``iw event`` subprocess
-is launched in parallel as a supplementary signal -- its lines are parsed
-opportunistically; the snapshot diff remains the source of truth.
+``wifi.events`` to produce discrete WifiEvents and RSSI samples are persisted.
+
+Sampling source, in order of preference:
+
+1. **Host-helper status file** (``/run/pingwatch-shared/wifi-status.json``).
+   On the Pi the container cannot read the WLAN hardware itself (it has no
+   privileged access to nl80211/``iw``), so the privileged host-helper samples
+   the association ~1 Hz and writes it to a shared file we consume here. This
+   is the only path that actually produces data on the appliance.
+2. **In-process nl80211 / ``iw``** -- fallback for dev/CI/cloud environments
+   that have no host-helper but might have direct interface access.
+
+An ``iw event`` subprocess is launched in parallel as a supplementary signal --
+its lines are parsed opportunistically; the snapshot diff remains the source of
+truth.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import re
 import shlex
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import structlog
 
@@ -39,6 +53,8 @@ class WifiConfig:
     interface: str = "wlan0"
     sample_interval_s: float = 1.0
     reassoc_min_duration_ms: int = 2000
+    status_file: str = "/run/pingwatch-shared/wifi-status.json"
+    status_stale_after_s: float = 12.0
 
 
 _IW_LINK_RE = {
@@ -63,6 +79,7 @@ class WifiMonitor:
         self._stop = asyncio.Event()
         self._prev_snapshot: WifiSnapshot | None = None
         self._pending_disconnect_ts: int | None = None
+        self._status_path = Path(self._cfg.status_file)
 
     async def run(self) -> None:
         iw_event_task = asyncio.create_task(self._iw_event_loop())
@@ -72,16 +89,12 @@ class WifiMonitor:
                     snapshot = await self._sample()
                 except Exception:  # noqa: BLE001
                     log.exception("wifi.sample_error")
-                    snapshot = WifiSnapshot(
-                        ts_ms=int(time.time() * 1000),
-                        ssid=None,
-                        bssid=None,
-                        rssi=None,
-                        channel=None,
-                        link_rate_kbps=None,
-                        associated=False,
-                    )
-                await self._handle(snapshot)
+                    snapshot = None
+                # ``None`` means "no fresh data this tick" (e.g. the host-helper
+                # file is stale/missing). We skip rather than fabricate a
+                # disconnect, so a brief host-helper hiccup can't spam events.
+                if snapshot is not None:
+                    await self._handle(snapshot)
                 await asyncio.sleep(self._cfg.sample_interval_s)
         finally:
             iw_event_task.cancel()
@@ -144,12 +157,61 @@ class WifiMonitor:
                 out.append(ev)
         return out
 
-    async def _sample(self) -> WifiSnapshot:
+    async def _sample(self) -> WifiSnapshot | None:
         ts_ms = int(time.time() * 1000)
+        # Primary path on the Pi: the host-helper refreshes a shared status
+        # file ~1 Hz. The container cannot read the WLAN hardware directly, so
+        # this file is the only source that actually yields data here.
+        if self._status_path.exists():
+            return await asyncio.to_thread(self._sample_from_file, ts_ms)
+        # Fallback for environments without the host-helper (dev/CI/cloud).
         if _HAS_NL80211:
             with contextlib.suppress(Exception):
                 return await asyncio.to_thread(self._sample_nl80211, ts_ms)
         return await self._sample_iw(ts_ms)
+
+    def _sample_from_file(self, ts_ms: int) -> WifiSnapshot | None:
+        """Build a snapshot from the host-helper's shared status file.
+
+        Returns ``None`` (skip this tick) when the file is missing, unparseable
+        or stale -- a lagging host-helper must not look like a WLAN disconnect.
+        A *fresh* ``connected: false`` file does yield a disassociated snapshot,
+        so genuine disconnects are still detected and recorded.
+        """
+        try:
+            st = self._status_path.stat()
+            if time.time() - st.st_mtime > self._cfg.status_stale_after_s:
+                return None
+            data = json.loads(self._status_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, ValueError, OSError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        file_ts = data.get("ts_ms")
+        ts = int(file_ts) if isinstance(file_ts, (int, float)) else ts_ms
+        if not data.get("connected"):
+            return WifiSnapshot(
+                ts_ms=ts,
+                ssid=None,
+                bssid=None,
+                rssi=None,
+                channel=None,
+                link_rate_kbps=None,
+                associated=False,
+            )
+        rssi = data.get("rssi_dbm")
+        if rssi is None:
+            rssi = data.get("rssi")
+        bitrate = data.get("bitrate_mbps")
+        return WifiSnapshot(
+            ts_ms=ts,
+            ssid=data.get("ssid"),
+            bssid=data.get("bssid"),
+            rssi=int(rssi) if rssi is not None else None,
+            channel=data.get("channel"),
+            link_rate_kbps=int(float(bitrate) * 1000) if bitrate is not None else None,
+            associated=True,
+        )
 
     def _sample_nl80211(self, ts_ms: int) -> WifiSnapshot:  # pragma: no cover - hw-dependent
         assert NL80211 is not None
