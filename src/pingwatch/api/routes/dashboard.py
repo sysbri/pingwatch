@@ -121,6 +121,45 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
             )
             worst_trace = traces.get(candidates[0]["id"])
 
+    # Konnektivitaets-Status fuer dicke Header-Pills
+    external_cards = [c for c in cards if c["kind"] == "external"]
+    # WLAN-Status bevorzugt aus dem live-File des host-helper, fallback DB.
+    import json as _json
+    import os as _os
+    wifi_ok = bool(wifi and wifi.get("rssi") is not None)
+    wifi_ssid = wifi.get("ssid") if wifi else None
+    wifi_rssi = wifi.get("rssi") if wifi else None
+    try:
+        _f = "/run/pingwatch-shared/wifi-status.json"
+        _file_age_ms = (now_ms - _os.path.getmtime(_f) * 1000) if _os.path.exists(_f) else 999_999_999
+        # Trigger fresh refresh wenn file aelter als 30s (fire-and-forget via FIFO)
+        if _file_age_ms > 30_000:
+            try:
+                _fd = _os.open("/run/pingwatch-host.fifo", _os.O_WRONLY | _os.O_NONBLOCK)
+                try:
+                    _os.write(_fd, b"wifi_status\n")
+                finally:
+                    _os.close(_fd)
+            except OSError:
+                pass
+        # Lese was da ist (auch wenn etwas stale, besser als nichts)
+        if _os.path.exists(_f):
+            with open(_f) as _fh:
+                _live = _json.load(_fh)
+            wifi_ok = bool(_live.get("connected"))
+            wifi_ssid = _live.get("ssid")
+            wifi_rssi = _live.get("rssi_dbm")
+    except (OSError, ValueError):
+        pass
+    # Internet ok = mindestens 1 externes Ziel mit loss_pct < 50% in 24h
+    internet_ok = any(
+        (c["kpi"].get("loss_pct") or 0) < 50.0 and (c["kpi"].get("total") or 0) > 0
+        for c in external_cards
+    )
+    internet_loss = (
+        min((c["kpi"].get("loss_pct") or 0) for c in external_cards)
+        if external_cards else None
+    )
     return {
         "ts_ms": now_ms,
         "hero": hero,
@@ -130,6 +169,13 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
         "timeline": timeline,
         "events": events,
         "worst_trace": worst_trace,
+        "connectivity": {
+            "wifi_ok": wifi_ok,
+            "wifi_ssid": wifi_ssid,
+            "wifi_rssi": wifi_rssi,
+            "internet_ok": internet_ok,
+            "internet_loss_pct": internet_loss,
+        },
     }
 
 

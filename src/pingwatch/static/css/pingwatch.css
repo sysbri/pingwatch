@@ -1729,6 +1729,26 @@ body .pw[data-theme="light"] .slider { background: #e5e5e7 !important; }
 body .pw[data-theme="light"] .slider-val,
 body .pw[data-theme="light"] .field .input { background: #ffffff !important; border-color: #e5e5e7 !important; color: #1d1d1f !important; }
 
+/* --- Konnektivitaets-Status-Pills im Hero (WLAN + Internet) ------- */
+body .pw .pw-conn-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  border: 1px solid transparent;
+}
+body .pw .pw-conn-pill .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  box-shadow: 0 0 12px currentColor;
+}
+body .pw .pw-conn-pill .lbl { font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; opacity: 0.85; }
+body .pw .pw-conn-pill .val { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; opacity: 0.95; }
+body .pw .pw-conn-pill.is-ok { background: rgba(16,185,129,0.10); border-color: rgba(16,185,129,0.35); color: #34d399; }
+body .pw .pw-conn-pill.is-ok .dot { background: #10b981; }
+body .pw .pw-conn-pill.is-bad { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.45); color: #f87171; animation: pw-conn-pulse 1.6s ease-in-out infinite; }
+body .pw .pw-conn-pill.is-bad .dot { background: #ef4444; }
+@keyframes pw-conn-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.35); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
+body .pw[data-theme="light"] .pw-conn-pill.is-ok { background: rgba(4,120,87,0.10) !important; border-color: rgba(4,120,87,0.40) !important; color: #047857 !important; }
+body .pw[data-theme="light"] .pw-conn-pill.is-bad { background: rgba(185,28,28,0.10) !important; border-color: rgba(185,28,28,0.45) !important; color: #b91c1c !important; }
+
 /* --- Dashboard Trace-Dest-Picker ---------------------------------- */
 body .pw .pw-trace-pick {
   background: #1f2937; border: 1px solid #374151; color: #e5e7eb;

@@ -10,6 +10,16 @@
     </div>
   </div>
   <div class="stats">
+    <div class="pw-conn-pill" :class="(dashboard.connectivity && dashboard.connectivity.wifi_ok) ? 'is-ok' : 'is-bad'">
+      <span class="dot"></span>
+      <span class="lbl">WLAN</span>
+      <span class="val" x-text="(dashboard.connectivity && dashboard.connectivity.wifi_ok) ? ((dashboard.connectivity.wifi_ssid || 'verbunden') + (dashboard.connectivity.wifi_rssi != null ? ' ' + dashboard.connectivity.wifi_rssi + ' dBm' : '')) : 'getrennt'"></span>
+    </div>
+    <div class="pw-conn-pill" :class="(dashboard.connectivity && dashboard.connectivity.internet_ok) ? 'is-ok' : 'is-bad'">
+      <span class="dot"></span>
+      <span class="lbl">Internet</span>
+      <span class="val" x-text="(dashboard.connectivity && dashboard.connectivity.internet_ok) ? ('OK · ' + ((dashboard.connectivity.internet_loss_pct || 0).toFixed(2)) + '% Loss') : 'weg'"></span>
+    </div>
     <div class="stat">
       <div class="v" x-text="(dashboard.hero && dashboard.hero.outages_24h) || 0"></div>
       <div class="l">Aussetzer 24h</div>
