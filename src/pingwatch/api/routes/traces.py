@@ -70,7 +70,7 @@ async def hop_trends(
 ) -> dict[str, Any]:
     """For each hop in the latest trace, return RTT history across last 200 traces."""
     traces_cur = await conn.execute(
-        "SELECT id, ts_ms FROM traceroutes WHERE dest_id = ? "
+        "SELECT id, ts_ms FROM traceroutes WHERE dest_id = ? "  # noqa: S608  # internal constant identifier, not user input
         + ("AND ts_ms >= ? " if since is not None else "")
         + "ORDER BY ts_ms DESC LIMIT 200",
         ((dest_id, since) if since is not None else (dest_id,)),

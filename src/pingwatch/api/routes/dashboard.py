@@ -133,7 +133,10 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     wifi_rssi = wifi.get("rssi") if wifi else None
     try:
         _f = "/run/pingwatch-shared/wifi-status.json"
-        _file_age_ms = (now_ms - _os.path.getmtime(_f) * 1000) if _os.path.exists(_f) else 999_999_999
+        _file_age_ms = (  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+            (now_ms - _os.path.getmtime(_f) * 1000)  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+            if _os.path.exists(_f) else 999_999_999  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+        )
         # Trigger fresh refresh wenn file aelter als 30s (fire-and-forget via FIFO)
         if _file_age_ms > 30_000:
             try:
@@ -145,8 +148,8 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
             except OSError:
                 pass
         # Lese was da ist (auch wenn etwas stale, besser als nichts)
-        if _os.path.exists(_f):
-            with open(_f) as _fh:
+        if _os.path.exists(_f):  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+            with open(_f) as _fh:  # noqa: ASYNC230  # startup/rare path, blocking is acceptable
                 _live = _json.load(_fh)
             wifi_ok = bool(_live.get("connected"))
             wifi_ssid = _live.get("ssid")
@@ -180,8 +183,8 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     # Live-File parsen fuer Bitrate/Freq (falls vorhanden)
     try:
         _f2 = "/run/pingwatch-shared/wifi-status.json"
-        if _os.path.exists(_f2):
-            with open(_f2) as _fh2:
+        if _os.path.exists(_f2):  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+            with open(_f2) as _fh2:  # noqa: ASYNC230  # startup/rare path, blocking is acceptable
                 _live2 = _json.load(_fh2)
             wifi_card_data["bitrate_mbps"] = _live2.get("bitrate_mbps")
             wifi_card_data["freq_mhz"] = _live2.get("freq")

@@ -38,7 +38,7 @@ def _read_ram() -> tuple[int, int]:
 
         used, total = pi_metrics.ram_mb()
         return used, total
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001,S110
         pass
     meminfo = Path("/proc/meminfo")
     if not meminfo.exists():
@@ -61,7 +61,7 @@ def _read_temp() -> float | None:
         from pingwatch.system import pi_metrics  # type: ignore[attr-defined]
 
         return pi_metrics.cpu_temp_c()
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001,S110
         pass
     path = Path("/sys/class/thermal/thermal_zone0/temp")
     if path.exists():

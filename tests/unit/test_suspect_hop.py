@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from pingwatch.traceroute.diff import find_suspect_hop
 from pingwatch.traceroute.mtr_runner import parse_mtr_json
 

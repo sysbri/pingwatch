@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import random
 import time
 from collections import deque
@@ -92,10 +93,8 @@ class MetricsAggregator:
         self._stop.set()
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
                 await self._task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
 
     async def _refresh_settings(self) -> None:
         self._spike_abs_us = await q.get_setting_typed(
@@ -110,7 +109,7 @@ class MetricsAggregator:
             while not self._stop.is_set():
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 key = msg.get("key", "") if isinstance(msg, dict) else ""
                 if key.startswith("spike.") or key.startswith("flaky."):
@@ -121,7 +120,7 @@ class MetricsAggregator:
             while not self._stop.is_set():
                 try:
                     sample = await asyncio.wait_for(queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 if isinstance(sample, PingSample):
                     await self.ingest(sample)
@@ -158,7 +157,7 @@ class MetricsAggregator:
             if len(st.reservoir) < _RESERVOIR_SIZE_24H:
                 st.reservoir.append((sample.ts_ms, sample.latency_us))
             else:
-                j = random.randint(0, st.reservoir_counter - 1)
+                j = random.randint(0, st.reservoir_counter - 1)  # noqa: S311  # non-cryptographic jitter/sampling
                 if j < _RESERVOIR_SIZE_24H:
                     st.reservoir[j] = (sample.ts_ms, sample.latency_us)
             # Drop expired entries lazily

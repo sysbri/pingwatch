@@ -231,19 +231,19 @@ async def list_outages(
         args.extend([f"%{search}%", f"%{search}%"])
     where_clause = " AND ".join(where)
     sql = (
-        "SELECT o.id, o.dest_id_primary, o.start_ts_ms, o.end_ts_ms, "
+        "SELECT o.id, o.dest_id_primary, o.start_ts_ms, o.end_ts_ms, "  # noqa: S608  # internal constant identifier, not user input
         "o.duration_ms, o.lost_count, o.type, o.suspect_hop_no, o.trace_id, "
         "o.notes, d.name AS dest_name "
         "FROM outages o LEFT JOIN destinations d ON d.id = o.dest_id_primary "
-        f"WHERE {where_clause} "  # noqa: S608
+        f"WHERE {where_clause} "
         "ORDER BY o.start_ts_ms DESC LIMIT ? OFFSET ?"
     )
     cur = await conn.execute(sql, [*args, limit, offset])
     rows = [dict(r) for r in await cur.fetchall()]
     cnt_sql = (
-        "SELECT COUNT(*) AS c FROM outages o "
+        "SELECT COUNT(*) AS c FROM outages o "  # noqa: S608  # internal constant identifier, not user input
         "LEFT JOIN destinations d ON d.id = o.dest_id_primary "
-        f"WHERE {where_clause}"  # noqa: S608
+        f"WHERE {where_clause}"
     )
     cnt_cur = await conn.execute(cnt_sql, args)
     cnt_row = await cnt_cur.fetchone()
@@ -307,9 +307,9 @@ async def list_raw_pings(
             where.append("(" + " OR ".join(clauses) + ")")
     where_clause = " AND ".join(where)
     sql = (
-        "SELECT id, dest_id, ts_ms, success, latency_us, ttl, sequence, "
+        "SELECT id, dest_id, ts_ms, success, latency_us, ttl, sequence, "  # noqa: S608  # internal constant identifier, not user input
         "error_kind, flags FROM raw_pings "
-        f"WHERE {where_clause} "  # noqa: S608
+        f"WHERE {where_clause} "
         "ORDER BY ts_ms DESC LIMIT ? OFFSET ?"
     )
     cur = await conn.execute(sql, [*args, limit, offset])
@@ -344,9 +344,9 @@ async def list_traces(
     if changed_only:
         where.append("route_changed = 1")
     sql = (
-        "SELECT id, dest_id, ts_ms, trigger, success, hop_count, "
+        "SELECT id, dest_id, ts_ms, trigger, success, hop_count, "  # noqa: S608  # internal constant identifier, not user input
         "signature_hash, route_changed FROM traceroutes "
-        f"WHERE {' AND '.join(where)} ORDER BY ts_ms DESC LIMIT ?"  # noqa: S608
+        f"WHERE {' AND '.join(where)} ORDER BY ts_ms DESC LIMIT ?"
     )
     cur = await conn.execute(sql, [*args, limit])
     return [dict(r) for r in await cur.fetchall()]

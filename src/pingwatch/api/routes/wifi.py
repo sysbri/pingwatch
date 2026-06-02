@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from pingwatch.api.deps import ConnDep
 
@@ -67,14 +67,16 @@ async def _write_fifo(line: str) -> None:
         raise HTTPException(status_code=503, detail="host helper not responding") from exc
 
 
-async def _wait_for_file(path: Path, max_wait_s: float, min_mtime: float = 0.0) -> dict[str, Any] | None:
+async def _wait_for_file(
+    path: Path, max_wait_s: float, min_mtime: float = 0.0
+) -> dict[str, Any] | None:
     deadline = time.monotonic() + max_wait_s
     while time.monotonic() < deadline:
         try:
-            st = path.stat()
+            st = path.stat()  # noqa: ASYNC240  # polling loop, blocking is acceptable
             if st.st_mtime >= min_mtime and st.st_size > 0:
                 try:
-                    return json.loads(path.read_text(encoding="utf-8"))
+                    return json.loads(path.read_text(encoding="utf-8"))  # noqa: ASYNC240  # polling loop, blocking is acceptable
                 except json.JSONDecodeError:
                     pass  # partial write, keep polling
         except FileNotFoundError:
@@ -104,7 +106,7 @@ async def scan() -> dict[str, Any]:
 
 
 @router.post("/connect")
-async def connect(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def connect(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008  # FastAPI dependency injection
     ssid = str(payload.get("ssid") or "").strip()
     password = str(payload.get("password") or "")
     _validate_ssid(ssid)
@@ -118,7 +120,11 @@ async def connect(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         raise HTTPException(status_code=504, detail="connect timeout")
 
     if data.get("ok"):
-        return {"ok": True, "ssid": data.get("ssid", ssid), "message": data.get("message", "connected")}
+        return {
+            "ok": True,
+            "ssid": data.get("ssid", ssid),
+            "message": data.get("message", "connected"),
+        }
     # Failure path — surface message, choose 400 for auth-like errors, 502 otherwise.
     msg = str(data.get("message", "connect failed"))
     lower = msg.lower()
@@ -148,7 +154,7 @@ async def get_status() -> dict[str, Any]:
 
 
 @router.post("/forget")
-async def forget(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+async def forget(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008  # FastAPI dependency injection
     ssid = str(payload.get("ssid") or "").strip()
     _validate_ssid(ssid)
     await _write_fifo(f"wifi_forget\t{ssid}")
@@ -211,7 +217,9 @@ async def overview_endpoint(
         "WHERE ts_ms >= ? GROUP BY event_type",
         (since_ms,),
     )
-    ev_counts: dict[str, int] = {row["event_type"]: int(row["cnt"]) for row in await ecur.fetchall()}
+    ev_counts: dict[str, int] = {
+        row["event_type"]: int(row["cnt"]) for row in await ecur.fetchall()
+    }
     kpi = {
         "rssi_mean": round(rssi_mean, 1) if rssi_mean is not None else None,
         "rssi_min": rssi_min,

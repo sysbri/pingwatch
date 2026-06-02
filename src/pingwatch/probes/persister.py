@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 
 import aiosqlite
@@ -21,7 +22,7 @@ class PersisterWorker:
         self,
         conn: aiosqlite.Connection,
         bus: Bus | None = None,
-        flag_lookup: "FlagLookup | None" = None,
+        flag_lookup: FlagLookup | None = None,
     ) -> None:
         self.conn = conn
         self.bus = bus or get_bus()
@@ -38,10 +39,8 @@ class PersisterWorker:
         self._stop.set()
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
                 await self._task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
         await self._flush()
 
     async def _run(self) -> None:
@@ -68,7 +67,7 @@ class PersisterWorker:
                                 flag,
                             )
                         )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 if time.monotonic() >= next_flush:
                     await self._flush()

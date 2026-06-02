@@ -40,11 +40,9 @@ def _lazy(module: str, attr: str) -> Any | None:
 def _install_signal_handlers(stop: asyncio.Event) -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(sig, stop.set)
-        except NotImplementedError:
+        with suppress(NotImplementedError):
             # Windows / non-POSIX — best-effort.
-            pass
+            loop.add_signal_handler(sig, stop.set)
 
 
 async def _run_uvicorn(
@@ -150,48 +148,59 @@ async def serve() -> None:
             )
             # Probe runner: 1 task per destination.
             await _spawn_worker(
-                tg, workers, "probe_runner", "pingwatch.probes.runner", "run_probe_runner", conn, bus
+                tg, workers, "probe_runner",
+                "pingwatch.probes.runner", "run_probe_runner", conn, bus,
             )
             # Metrics: rolling aggregator + hourly rollup writer.
             await _spawn_worker(
-                tg, workers, "metrics_aggregator", "pingwatch.metrics.aggregator", "run_aggregator", conn, bus
+                tg, workers, "metrics_aggregator",
+                "pingwatch.metrics.aggregator", "run_aggregator", conn, bus,
             )
             await _spawn_worker(
-                tg, workers, "hourly_rollup", "pingwatch.metrics.hourly", "run_hourly_rollup", conn, bus
+                tg, workers, "hourly_rollup",
+                "pingwatch.metrics.hourly", "run_hourly_rollup", conn, bus,
             )
             # Streams.
             await _spawn_worker(
-                tg, workers, "http_trickle", "pingwatch.streams.http_trickle", "run_http_trickle", conn, bus
+                tg, workers, "http_trickle",
+                "pingwatch.streams.http_trickle", "run_http_trickle", conn, bus,
             )
             await _spawn_worker(
-                tg, workers, "tcp_heartbeat", "pingwatch.streams.tcp_heartbeat", "run_tcp_heartbeat", conn, bus
+                tg, workers, "tcp_heartbeat",
+                "pingwatch.streams.tcp_heartbeat", "run_tcp_heartbeat", conn, bus,
             )
             # WiFi monitoring.
             await _spawn_worker(
-                tg, workers, "wifi_monitor", "pingwatch.wifi.monitor", "run_wifi_monitor", conn, bus
+                tg, workers, "wifi_monitor",
+                "pingwatch.wifi.monitor", "run_wifi_monitor", conn, bus,
             )
             # Traceroute scheduler.
             await _spawn_worker(
-                tg, workers, "trace_scheduler", "pingwatch.traceroute.scheduler", "run_trace_scheduler", conn, bus
+                tg, workers, "trace_scheduler",
+                "pingwatch.traceroute.scheduler", "run_trace_scheduler", conn, bus,
             )
             # Outage detection + correlation.
             await _spawn_worker(
-                tg, workers, "outage_detector", "pingwatch.outages.detector", "run_outage_detector", conn, bus
+                tg, workers, "outage_detector",
+                "pingwatch.outages.detector", "run_outage_detector", conn, bus,
             )
             await _spawn_worker(
-                tg, workers, "outage_correlator", "pingwatch.outages.correlator", "run_outage_correlator", conn, bus
+                tg, workers, "outage_correlator",
+                "pingwatch.outages.correlator", "run_outage_correlator", conn, bus,
             )
             # WLAN classifier subscriber: retags outages when wifi events arrive.
             await _spawn_worker(
-                tg, workers, "wlan_classifier", "pingwatch.outages.classifier", "run_classifier_subscriber", conn, bus
+                tg, workers, "wlan_classifier",
+                "pingwatch.outages.classifier", "run_classifier_subscriber", conn, bus,
             )
             # Retention.
             await _spawn_worker(
-                tg, workers, "retention", "pingwatch.db.retention", "run_retention", conn
+                tg, workers, "retention", "pingwatch.db.retention", "run_retention", conn,
             )
             # Pi metrics sampler (CPU %).
             await _spawn_worker(
-                tg, workers, "pi_metrics_sampler", "pingwatch.system.pi_metrics", "pi_metrics_sampler"
+                tg, workers, "pi_metrics_sampler",
+                "pingwatch.system.pi_metrics", "pi_metrics_sampler",
             )
             await stop.wait()
             log.info("shutdown.draining", workers=len(workers))

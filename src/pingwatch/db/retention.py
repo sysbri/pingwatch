@@ -10,6 +10,7 @@ so we never block the event loop for long. After deletes we run
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
 
@@ -102,7 +103,7 @@ class RetentionWorker:
         deleted_total = 0
         while not self._stop.is_set():
             cur = await self._conn.execute(
-                f"DELETE FROM {table} "
+                f"DELETE FROM {table} "  # noqa: S608  # internal constant identifier, not user input
                 f"WHERE rowid IN (SELECT rowid FROM {table} WHERE {column} < ? LIMIT ?)",
                 (cutoff, CHUNK_SIZE),
             )
@@ -140,10 +141,8 @@ class RetentionWorker:
         return now_ms - days * DAY_MS
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self._stop.wait(), timeout=seconds)
-        except asyncio.TimeoutError:
-            pass
 
     def stop(self) -> None:
         self._stop.set()

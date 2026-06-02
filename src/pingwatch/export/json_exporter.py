@@ -28,7 +28,7 @@ async def export_destinations_json(
         "ordering",
         "resolved_ip",
     ]
-    cur = await conn.execute(f"SELECT {','.join(cols)} FROM destinations ORDER BY ordering")
+    cur = await conn.execute(f"SELECT {','.join(cols)} FROM destinations ORDER BY ordering")  # noqa: S608  # internal constant identifier, not user input
     rows = await cur.fetchall()
     payload = {"destinations": _rows_to_dicts([list(r) for r in rows], cols)}
     return json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
@@ -39,9 +39,11 @@ async def export_pings_json(
 ) -> AsyncIterator[bytes]:
     """Streaming JSON array — chunked to keep memory bounded."""
     yield b'{"dest_id": ' + str(dest_id).encode() + b', "pings": ['
-    cols = ["id", "dest_id", "ts_ms", "success", "latency_us", "ttl", "sequence", "error_kind", "flags"]
+    cols = [
+        "id", "dest_id", "ts_ms", "success", "latency_us", "ttl", "sequence", "error_kind", "flags",
+    ]
     cur = await conn.execute(
-        f"SELECT {','.join(cols)} FROM raw_pings "
+        f"SELECT {','.join(cols)} FROM raw_pings "  # noqa: S608  # internal constant identifier, not user input
         "WHERE dest_id=? AND ts_ms BETWEEN ? AND ? ORDER BY ts_ms",
         (dest_id, since_ms, until_ms),
     )
@@ -70,7 +72,7 @@ async def export_outages_json(
         "notes",
     ]
     cur = await conn.execute(
-        f"SELECT {','.join(cols)} FROM outages "
+        f"SELECT {','.join(cols)} FROM outages "  # noqa: S608  # internal constant identifier, not user input
         "WHERE start_ts_ms BETWEEN ? AND ? ORDER BY start_ts_ms",
         (since_ms, until_ms),
     )
@@ -78,7 +80,8 @@ async def export_outages_json(
     outages = _rows_to_dicts([list(r) for r in rows], cols)
     for o in outages:
         mcur = await conn.execute(
-            "SELECT dest_id, start_ts_ms, end_ts_ms, lost_count FROM outage_members WHERE outage_id=?",
+            "SELECT dest_id, start_ts_ms, end_ts_ms, lost_count "
+            "FROM outage_members WHERE outage_id=?",
             (o["id"],),
         )
         o["members"] = [

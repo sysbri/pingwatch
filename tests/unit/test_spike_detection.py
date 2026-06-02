@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from pingwatch.db.connection import open_db
 from pingwatch.db import queries as q
+from pingwatch.db.connection import open_db
 from pingwatch.metrics.aggregator import MetricsAggregator
 from pingwatch.models import FLAG_SPIKE, PingSample
 

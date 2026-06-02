@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from pingwatch.db.connection import open_db
 from pingwatch.db import queries as q
+from pingwatch.db.connection import open_db
 from pingwatch.models import (
     DestKind,
     HeartbeatEvent,
@@ -238,7 +238,9 @@ async def test_hourly_and_daily_aggregates(tmp_path):
                 "outage_ms": 5000,
             },
         )
-        drows = await q.list_daily_aggregates(conn, dest_id, day_bucket - 1, day_bucket + 86_400_000)
+        drows = await q.list_daily_aggregates(
+            conn, dest_id, day_bucket - 1, day_bucket + 86_400_000
+        )
         assert len(drows) == 1
 
 
@@ -330,7 +332,9 @@ async def test_heartbeat_and_notifications(tmp_path):
         ts = _now_ms()
         await q.insert_heartbeat_event(
             conn,
-            HeartbeatEvent(ts_ms=ts, event_type=HeartbeatEventType.LOSS, duration_ms=900, missed_count=4),
+            HeartbeatEvent(
+                ts_ms=ts, event_type=HeartbeatEventType.LOSS, duration_ms=900, missed_count=4
+            ),
         )
         nid = await q.insert_notification(
             conn,

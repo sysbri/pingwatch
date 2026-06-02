@@ -224,7 +224,7 @@ async def _run_speedtest_net(conn, task_id: str, settings: dict[str, Any]) -> di
         err = "cancelled"
         result["status"] = "aborted"
         raise
-    except asyncio.TimeoutError:
+    except TimeoutError:
         err = "timeout"
         result["status"] = "failed"
         log.warning("speedtest.failed", task_id=task_id, error=err, provider="speedtest_net")
@@ -266,7 +266,7 @@ async def _iperf3_run(host: str, port: int, reverse: bool) -> dict[str, Any]:
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=IPERF3_TIMEOUT_S)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         raise
     if proc.returncode != 0:
@@ -327,7 +327,7 @@ async def _run_iperf3(conn, task_id: str, settings: dict[str, Any]) -> dict[str,
                 mean_rtt_us = sender.get("mean_rtt")
                 if mean_rtt_us:
                     latency_ms = float(mean_rtt_us) / 1000.0
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S110
             pass
         host_connect = down_json.get("start", {}).get("connecting_to", {}).get("host") or host
         server = f"iperf3 @ {host_connect}:{port}"
@@ -336,7 +336,7 @@ async def _run_iperf3(conn, task_id: str, settings: dict[str, Any]) -> dict[str,
         err = "cancelled"
         result["status"] = "aborted"
         raise
-    except asyncio.TimeoutError:
+    except TimeoutError:
         err = "iperf3 timeout"
         result["status"] = "failed"
         log.warning("speedtest.failed", task_id=task_id, error=err, provider="iperf3")

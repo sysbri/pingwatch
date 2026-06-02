@@ -14,6 +14,7 @@ budget (``stream.daily_cap_mb``) is exhausted; it resumes the next day.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import time
 import zoneinfo
@@ -99,34 +100,33 @@ class HttpTrickleWorker:
         headers = {"User-Agent": "PingWatch/0.1 (+https://github.com/local/pingwatch)"}
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0), headers=headers
-        ) as client:
-            async with client.stream("GET", cfg.endpoint) as response:
-                response.raise_for_status()
-                if not self._was_connected:
-                    if self._last_disconnect_ts_ms is None:
-                        await self._publish_event(StreamEventType.CONNECT)
-                    else:
-                        gap_ms = int(time.time() * 1000) - self._last_disconnect_ts_ms
-                        if gap_ms > 2000:
-                            await self._publish_event(StreamEventType.RECONNECT)
-                    self._was_connected = True
-                async for piece in response.aiter_bytes(chunk_size=chunk):
-                    if self._stop.is_set():
+        ) as client, client.stream("GET", cfg.endpoint) as response:
+            response.raise_for_status()
+            if not self._was_connected:
+                if self._last_disconnect_ts_ms is None:
+                    await self._publish_event(StreamEventType.CONNECT)
+                else:
+                    gap_ms = int(time.time() * 1000) - self._last_disconnect_ts_ms
+                    if gap_ms > 2000:
+                        await self._publish_event(StreamEventType.RECONNECT)
+                self._was_connected = True
+            async for piece in response.aiter_bytes(chunk_size=chunk):
+                if self._stop.is_set():
+                    return
+                if trickle_should_pause():
+                    await asyncio.sleep(0.5)
+                    self._was_connected = False
+                    continue
+                state.bytes_in_window += len(piece)
+                state.bytes_total += len(piece)
+                now_ms = int(time.time() * 1000)
+                while now_ms - state.window_start_ms >= 1000:
+                    await self._flush_window(state, state.window_start_ms + 1000)
+                    state.window_start_ms += 1000
+                    if await self._budget_exceeded():
+                        log.info("stream.budget_reached_mid_stream")
                         return
-                    if trickle_should_pause():
-                        await asyncio.sleep(0.5)
-                        self._was_connected = False
-                        continue
-                    state.bytes_in_window += len(piece)
-                    state.bytes_total += len(piece)
-                    now_ms = int(time.time() * 1000)
-                    while now_ms - state.window_start_ms >= 1000:
-                        await self._flush_window(state, state.window_start_ms + 1000)
-                        state.window_start_ms += 1000
-                        if await self._budget_exceeded():
-                            log.info("stream.budget_reached_mid_stream")
-                            return
-                    await asyncio.sleep(chunk_period_s)
+                await asyncio.sleep(chunk_period_s)
 
     async def _flush_window(self, state: _WindowState, window_end_ms: int) -> None:
         kbps = state.bytes_in_window // 1024
@@ -146,7 +146,8 @@ class HttpTrickleWorker:
         await self._bus.publish("stream.samples", sample)
         if kbps == 0:
             state.zero_run += 1
-            if state.zero_run >= self._cfg.zero_kbps_min_samples and state.open_drop_outage_id is None:
+            if (state.zero_run >= self._cfg.zero_kbps_min_samples
+                    and state.open_drop_outage_id is None):
                 state.drop_start_ts_ms = window_end_ms
                 state.drop_kbps_before = state.last_kbps
                 state.open_drop_outage_id = await self._open_stream_outage(window_end_ms)
@@ -234,10 +235,8 @@ class HttpTrickleWorker:
         return max(1.0, (midnight - now).total_seconds())
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self._stop.wait(), timeout=seconds)
-        except asyncio.TimeoutError:
-            pass
 
     def stop(self) -> None:
         self._stop.set()
@@ -251,7 +250,9 @@ async def run_http_trickle(conn, bus) -> None:
     cfg = StreamConfig()
     cfg.endpoint = await queries.get_setting_typed(conn, "stream.endpoint", cfg.endpoint)
     cfg.target_kbps = await queries.get_setting_typed(conn, "stream.target_kbps", cfg.target_kbps)
-    cfg.daily_cap_mb = await queries.get_setting_typed(conn, "stream.daily_cap_mb", cfg.daily_cap_mb)
+    cfg.daily_cap_mb = await queries.get_setting_typed(
+        conn, "stream.daily_cap_mb", cfg.daily_cap_mb,
+    )
     cfg.zero_kbps_min_samples = await queries.get_setting_typed(
         conn, "stream.zero_kbps_min_samples", cfg.zero_kbps_min_samples
     )

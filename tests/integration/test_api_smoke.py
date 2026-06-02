@@ -4,6 +4,7 @@ against a freshly-seeded SQLite DB.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from collections.abc import Iterator
@@ -21,10 +22,8 @@ def client() -> Iterator[TestClient]:
     app = build_app(db_path=path)
     with TestClient(app) as c:
         yield c
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(path)
-    except OSError:
-        pass
 
 
 def test_healthz(client: TestClient) -> None:

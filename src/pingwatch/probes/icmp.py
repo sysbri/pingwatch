@@ -57,7 +57,7 @@ class IcmpProbe(Probe):
 
     async def run(self) -> AsyncIterator[PingSample]:
         # Jitter the first run so concurrent probes don't all fire on the same tick.
-        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))
+        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))  # noqa: S311  # non-cryptographic jitter/sampling
         while True:
             t0 = time.monotonic()
             sample = await self.probe_once()
@@ -67,5 +67,5 @@ class IcmpProbe(Probe):
             sleep_for = interval_s - elapsed
             if sleep_for > 0:
                 # +/- 5% jitter to avoid lockstep behaviour
-                jitter = random.uniform(-0.05, 0.05) * interval_s
+                jitter = random.uniform(-0.05, 0.05) * interval_s  # noqa: S311  # non-cryptographic jitter/sampling
                 await asyncio.sleep(max(0.0, sleep_for + jitter))

@@ -26,10 +26,10 @@ async def list_usb_mounts(root: Path = Path("/media")) -> list[Path]:
     non-empty directory (best-effort for dev boxes without the udev rule).
     """
     mounts: list[Path] = []
-    if not root.exists():
+    if not root.exists():  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
         return mounts
     try:
-        for entry in root.iterdir():
+        for entry in root.iterdir():  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
             if not entry.is_dir():
                 continue
             marker = entry / MARKER_NAME
@@ -72,10 +72,7 @@ async def watch_usb_mounts(root: Path) -> AsyncIterator[Path]:
 
 async def safe_write_zip(src: Path, dst_usb: Path) -> Path:
     """Copy `src` to `dst_usb`, fsync, return final path."""
-    if dst_usb.is_dir():
-        dst = dst_usb / src.name
-    else:
-        dst = dst_usb
+    dst = dst_usb / src.name if dst_usb.is_dir() else dst_usb  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
     with src.open("rb") as s, dst.open("wb") as d:
         while True:
             chunk = s.read(1024 * 1024)

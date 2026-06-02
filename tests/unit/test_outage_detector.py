@@ -11,8 +11,8 @@ import pytest_asyncio
 
 from pingwatch.bus import Bus
 from pingwatch.models import (
-    DestKind,
     Destination,
+    DestKind,
     OutageClosed,
     OutageOpened,
     PingSample,
@@ -60,7 +60,7 @@ def _loss(dest_id: int, ts: int) -> PingSample:
     return PingSample(dest_id=dest_id, ts_ms=ts, success=False, error_kind="timeout")
 
 
-async def _collect(bus: Bus, topic: str, n: int, timeout: float = 1.0) -> list[object]:
+async def _collect(bus: Bus, topic: str, n: int, timeout: float = 1.0) -> list[object]:  # noqa: ASYNC109  # explicit timeout param is intentional
     collected: list[object] = []
     async with bus.subscribe(topic) as q:
         for _ in range(n):
@@ -69,7 +69,9 @@ async def _collect(bus: Bus, topic: str, n: int, timeout: float = 1.0) -> list[o
 
 
 @pytest.mark.asyncio
-async def test_two_losses_open_outage(db: aiosqlite.Connection, two_dests: list[Destination]) -> None:
+async def test_two_losses_open_outage(
+    db: aiosqlite.Connection, two_dests: list[Destination]
+) -> None:
     bus = Bus()
     detector = OutageDetector(db, two_dests, bus=bus)
     collector_task = asyncio.create_task(_collect(bus, "outages.new", 1))
@@ -123,7 +125,9 @@ async def test_two_oks_close_outage(db: aiosqlite.Connection, two_dests: list[De
 
 
 @pytest.mark.asyncio
-async def test_single_loss_does_not_open(db: aiosqlite.Connection, two_dests: list[Destination]) -> None:
+async def test_single_loss_does_not_open(
+    db: aiosqlite.Connection, two_dests: list[Destination]
+) -> None:
     bus = Bus()
     detector = OutageDetector(db, two_dests, bus=bus)
     await detector.process(_loss(2, 1000))

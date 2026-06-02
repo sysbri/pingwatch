@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
 
@@ -97,14 +98,12 @@ class TraceScheduler:
                     task = asyncio.create_task(self._run_once(dest, TraceTrigger.SCHEDULED))
                     self._tasks.add(task)
                     task.add_done_callback(self._tasks.discard)
-            try:
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self._stop.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
-                pass
 
     async def _run_once(self, dest: object, trigger: TraceTrigger) -> None:
         host = getattr(dest, "address", None)
-        dest_id = int(getattr(dest, "id"))
+        dest_id = int(dest.id)
         if not host:
             return
         self._last_run_ts_ms[dest_id] = int(time.time() * 1000)

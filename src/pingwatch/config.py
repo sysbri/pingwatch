@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -46,7 +45,7 @@ class Settings(BaseModel):
     timezone: str = "Europe/Berlin"
 
     @classmethod
-    def from_env_and_yaml(cls) -> "Settings":
+    def from_env_and_yaml(cls) -> Settings:
         env = Env()
         cfg_data: dict = {}
         if env.config.exists():

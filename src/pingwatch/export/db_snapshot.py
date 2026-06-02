@@ -17,9 +17,9 @@ async def hot_db_snapshot(conn: aiosqlite.Connection, dst: Path) -> None:
     `aiosqlite.Connection.backup(target)` wraps `sqlite3.Connection.backup()`,
     which uses the online backup API. The target is created if missing.
     """
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
-        dst.unlink()
+    dst.parent.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+    if dst.exists():  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
+        dst.unlink()  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
     async with aiosqlite.connect(dst) as target:
         await conn.backup(target)
         await target.commit()

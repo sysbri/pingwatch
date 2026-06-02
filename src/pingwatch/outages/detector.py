@@ -89,7 +89,9 @@ class OutageDetector:
         rows = await queries.open_outages(self._conn)
         for row in rows:
             outage_id = int(row["id"])
-            dest_id = row.get("dest_id_primary") if isinstance(row, dict) else row["dest_id_primary"]
+            dest_id = (
+                row.get("dest_id_primary") if isinstance(row, dict) else row["dest_id_primary"]
+            )
             start_ts_ms = int(row["start_ts_ms"])
             last_ts_ms = await _last_ping_ts(self._conn, dest_id) if dest_id else None
             ref_ts = last_ts_ms if last_ts_ms is not None else start_ts_ms

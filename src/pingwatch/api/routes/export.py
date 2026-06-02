@@ -169,10 +169,10 @@ async def export_usb(
     range: str = Query(default="24h"),  # noqa: A002
 ) -> OkResponse:
     target_dir = Path("/media/pingwatch-usb")
-    if not target_dir.exists():
+    if not target_dir.exists():  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
         return OkResponse(ok=False, detail="USB not mounted at /media/pingwatch-usb")
     try:
-        from pingwatch.export import zip_bundle, usb_writer  # type: ignore[attr-defined]
+        from pingwatch.export import usb_writer  # type: ignore[attr-defined]
 
         path = await usb_writer.write(target_dir, format, range)
     except Exception as exc:  # noqa: BLE001

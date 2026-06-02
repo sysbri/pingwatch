@@ -57,7 +57,7 @@ class DnsQueryProbe(Probe):
                 latency_us=latency_us,
                 sequence=seq,
             )
-        except (dns.exception.DNSException, asyncio.TimeoutError) as exc:
+        except (TimeoutError, dns.exception.DNSException) as exc:
             return PingSample(
                 dest_id=self.dest.id,
                 ts_ms=start_ms,
@@ -75,7 +75,7 @@ class DnsQueryProbe(Probe):
             )
 
     async def run(self) -> AsyncIterator[PingSample]:
-        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))
+        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))  # noqa: S311  # non-cryptographic jitter/sampling
         while True:
             t0 = time.monotonic()
             yield await self.probe_once()
@@ -83,5 +83,5 @@ class DnsQueryProbe(Probe):
             interval_s = self.dest.interval_ms / 1000.0
             sleep_for = interval_s - elapsed
             if sleep_for > 0:
-                jitter = random.uniform(-0.05, 0.05) * interval_s
+                jitter = random.uniform(-0.05, 0.05) * interval_s  # noqa: S311  # non-cryptographic jitter/sampling
                 await asyncio.sleep(max(0.0, sleep_for + jitter))

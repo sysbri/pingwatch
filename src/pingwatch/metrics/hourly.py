@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -122,10 +123,8 @@ class HourlyRollupWorker:
         self._stop.set()
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
                 await self._task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
         await self._flush(finalize_old=True)
 
     async def _boot_recovery(self) -> None:
@@ -177,7 +176,7 @@ class HourlyRollupWorker:
                         # Spike flag may have been set by persister; reading flags off raw_pings
                         # isn't possible mid-flight, so treat as non-spike here.
                         self.ingest(msg, is_spike=False)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 if time.monotonic() >= next_flush:
                     await self._flush()

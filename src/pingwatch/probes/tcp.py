@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import random
 import time
 from collections.abc import AsyncIterator
@@ -34,10 +35,8 @@ class TcpProbe(Probe):
             )
             latency_us = int((time.monotonic() - start) * 1_000_000)
             writer.close()
-            try:
+            with contextlib.suppress(Exception):  # noqa: BLE001
                 await writer.wait_closed()
-            except Exception:  # noqa: BLE001
-                pass
             del reader
             return PingSample(
                 dest_id=self.dest.id,
@@ -46,7 +45,7 @@ class TcpProbe(Probe):
                 latency_us=latency_us,
                 sequence=seq,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return PingSample(
                 dest_id=self.dest.id,
                 ts_ms=start_ms,
@@ -64,7 +63,7 @@ class TcpProbe(Probe):
             )
 
     async def run(self) -> AsyncIterator[PingSample]:
-        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))
+        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))  # noqa: S311  # non-cryptographic jitter/sampling
         while True:
             t0 = time.monotonic()
             yield await self.probe_once()
@@ -72,5 +71,5 @@ class TcpProbe(Probe):
             interval_s = self.dest.interval_ms / 1000.0
             sleep_for = interval_s - elapsed
             if sleep_for > 0:
-                jitter = random.uniform(-0.05, 0.05) * interval_s
+                jitter = random.uniform(-0.05, 0.05) * interval_s  # noqa: S311  # non-cryptographic jitter/sampling
                 await asyncio.sleep(max(0.0, sleep_for + jitter))

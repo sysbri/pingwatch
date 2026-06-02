@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
@@ -101,7 +102,7 @@ async def write_export_to_usb(
 
     Raises FileNotFoundError if usb_root is not a directory (no stick).
     """
-    if not usb_root.exists() or not usb_root.is_dir():
+    if not usb_root.exists() or not usb_root.is_dir():  # noqa: ASYNC240  # startup/rare path, blocking is acceptable
         raise FileNotFoundError(f"USB mount not present: {usb_root}")
 
     tmp_zip = await build_export_zip(conn, since_ms, until_ms)
@@ -118,10 +119,8 @@ async def write_export_to_usb(
         os.sync()
         return target
     finally:
-        try:
+        with contextlib.suppress(OSError):
             tmp_zip.unlink()
-        except OSError:
-            pass
 
 
 async def build_diagnose_bundle(conn: aiosqlite.Connection) -> Path:
@@ -167,7 +166,9 @@ async def build_diagnose_bundle(conn: aiosqlite.Connection) -> Path:
                 ).encode("utf-8"),
             )
             zf.writestr("system_info.json", json.dumps(sys_info, indent=2).encode("utf-8"))
-            zf.writestr("config.json", json.dumps(_sanitized_config_dict(), indent=2).encode("utf-8"))
+            zf.writestr(
+                "config.json", json.dumps(_sanitized_config_dict(), indent=2).encode("utf-8"),
+            )
             zf.writestr(
                 "manifest.json",
                 json.dumps(
@@ -183,7 +184,5 @@ async def build_diagnose_bundle(conn: aiosqlite.Connection) -> Path:
                 zf.writestr(f"logs/{name}", blob)
         return out_path
     finally:
-        try:
-            snap.unlink()
-        except OSError:
-            pass
+        with contextlib.suppress(OSError):
+            snap.unlink()  # noqa: ASYNC240  # startup/rare path, blocking is acceptable

@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, status
 
 from pingwatch.api import _queries_compat as q
 from pingwatch.api.deps import ConnDep
-from pingwatch.bus import get_bus
 from pingwatch.api.schemas import (
     OkResponse,
     ReorderIn,
@@ -18,6 +17,7 @@ from pingwatch.api.schemas import (
     TargetPatch,
     TestResult,
 )
+from pingwatch.bus import get_bus
 
 router = APIRouter(prefix="/api/targets", tags=["targets"])
 

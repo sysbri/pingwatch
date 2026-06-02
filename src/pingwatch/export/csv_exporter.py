@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 import aiosqlite
 
 
-def _writer() -> tuple[io.StringIO, "csv._writer"]:
+def _writer() -> tuple[io.StringIO, csv._writer]:
     buf = io.StringIO()
     return buf, csv.writer(buf, lineterminator="\n")
 
@@ -53,9 +53,9 @@ async def export_pings_csv(
 ) -> AsyncIterator[bytes]:
     """Streaming export — yields chunks to avoid loading multi-million-row results."""
     header_buf, header_w = _writer()
-    header_w.writerow(
-        ["id", "dest_id", "ts_ms", "success", "latency_us", "ttl", "sequence", "error_kind", "flags"]
-    )
+    header_w.writerow([
+        "id", "dest_id", "ts_ms", "success", "latency_us", "ttl", "sequence", "error_kind", "flags",
+    ])
     yield header_buf.getvalue().encode("utf-8")
 
     cur = await conn.execute(

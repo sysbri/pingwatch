@@ -115,7 +115,9 @@ class Correlator:
             start_ts - w,
             start_ts + w,
         )
-        candidates: list[dict[str, object]] = [dict(r) for r in rows if r["type"] != OutageType.STREAM.value]
+        candidates: list[dict[str, object]] = [
+            dict(r) for r in rows if r["type"] != OutageType.STREAM.value
+        ]
         if not candidates:
             return opened.outage_id
         by_dest: dict[int | None, dict[str, object]] = {}

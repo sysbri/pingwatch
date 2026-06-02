@@ -8,8 +8,8 @@ from typing import Any, Literal, TypeVar, cast
 import aiosqlite
 
 from ..models import (
-    DestKind,
     Destination,
+    DestKind,
     HeartbeatEvent,
     OutageType,
     PingSample,
@@ -132,7 +132,7 @@ async def update_destination(conn: aiosqlite.Connection, dest_id: int, **fields:
             vals.append(v)
     vals.append(dest_id)
     await conn.execute(
-        f"UPDATE destinations SET {', '.join(cols)} WHERE id = ?",
+        f"UPDATE destinations SET {', '.join(cols)} WHERE id = ?",  # noqa: S608  # internal constant identifier, not user input
         tuple(vals),
     )
     await conn.commit()
@@ -186,7 +186,7 @@ def _cast_setting(value: str, value_type: str) -> Any:
     return value
 
 
-async def get_setting_typed(conn: aiosqlite.Connection, key: str, default: T) -> T:
+async def get_setting_typed(conn: aiosqlite.Connection, key: str, default: T) -> T:  # noqa: UP047
     cur = await conn.execute("SELECT value, value_type FROM settings WHERE key = ?", (key,))
     row = await cur.fetchone()
     await cur.close()
@@ -316,7 +316,7 @@ async def list_raw_pings(
         if status_clauses:
             clauses.append("(" + " OR ".join(status_clauses) + ")")
     sql = (
-        "SELECT id, dest_id, ts_ms, success, latency_us, ttl, sequence, error_kind, flags "
+        "SELECT id, dest_id, ts_ms, success, latency_us, ttl, sequence, error_kind, flags "  # noqa: S608  # internal constant identifier, not user input
         f"FROM raw_pings WHERE {' AND '.join(clauses)} "
         "ORDER BY ts_ms DESC LIMIT ? OFFSET ?"
     )
@@ -420,7 +420,7 @@ async def upsert_hourly_aggregate(conn: aiosqlite.Connection, row: dict[str, Any
         INSERT INTO hourly_aggregates({', '.join(_HOURLY_COLS)})
         VALUES ({placeholders})
         ON CONFLICT(dest_id, hour_bucket) DO UPDATE SET {updates}
-        """,
+        """,  # noqa: S608  # internal constant identifier, not user input
         vals,
     )
     await conn.commit()
@@ -488,7 +488,7 @@ async def upsert_daily_aggregate(conn: aiosqlite.Connection, row: dict[str, Any]
         INSERT INTO daily_aggregates({', '.join(_DAILY_COLS)})
         VALUES ({placeholders})
         ON CONFLICT(dest_id, day_bucket) DO UPDATE SET {updates}
-        """,
+        """,  # noqa: S608  # internal constant identifier, not user input
         vals,
     )
     await conn.commit()
@@ -595,7 +595,7 @@ async def list_outages(
         clauses.append("(notes LIKE ?)")
         params.append(f"%{search}%")
     sql = (
-        "SELECT id, dest_id_primary, start_ts_ms, end_ts_ms, duration_ms, lost_count, "
+        "SELECT id, dest_id_primary, start_ts_ms, end_ts_ms, duration_ms, lost_count, "  # noqa: S608  # internal constant identifier, not user input
         "type, suspect_hop_no, trace_id, notes FROM outages "
         f"WHERE {' AND '.join(clauses)} ORDER BY start_ts_ms DESC LIMIT ? OFFSET ?"
     )
@@ -1052,7 +1052,7 @@ async def mark_notifications_seen(
         return
     placeholders = ", ".join(["?"] * len(ids))
     await conn.execute(
-        f"UPDATE notifications SET seen_at_ts_ms = ? WHERE id IN ({placeholders})",
+        f"UPDATE notifications SET seen_at_ts_ms = ? WHERE id IN ({placeholders})",  # noqa: S608  # internal constant identifier, not user input
         (_now_ms(), *ids),
     )
     await conn.commit()
@@ -1125,7 +1125,7 @@ async def update_speedtest_failed(
 
 async def speedtest_last(conn: aiosqlite.Connection) -> dict[str, Any] | None:
     cur = await conn.execute(
-        f"SELECT {_SPEEDTEST_COLS} FROM speedtests WHERE status = 'done' "
+        f"SELECT {_SPEEDTEST_COLS} FROM speedtests WHERE status = 'done' "  # noqa: S608  # internal constant identifier, not user input
         "ORDER BY ts_ms DESC LIMIT 1"
     )
     row = await cur.fetchone()
@@ -1137,7 +1137,7 @@ async def speedtest_by_task(
     conn: aiosqlite.Connection, task_id: str
 ) -> dict[str, Any] | None:
     cur = await conn.execute(
-        f"SELECT {_SPEEDTEST_COLS} FROM speedtests WHERE task_id = ?",
+        f"SELECT {_SPEEDTEST_COLS} FROM speedtests WHERE task_id = ?",  # noqa: S608  # internal constant identifier, not user input
         (task_id,),
     )
     row = await cur.fetchone()
@@ -1149,7 +1149,7 @@ async def speedtest_history(
     conn: aiosqlite.Connection, limit: int
 ) -> list[dict[str, Any]]:
     cur = await conn.execute(
-        f"SELECT {_SPEEDTEST_COLS} FROM speedtests "
+        f"SELECT {_SPEEDTEST_COLS} FROM speedtests "  # noqa: S608  # internal constant identifier, not user input
         "ORDER BY ts_ms DESC LIMIT ?",
         (limit,),
     )

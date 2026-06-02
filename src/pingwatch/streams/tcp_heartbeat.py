@@ -147,10 +147,8 @@ class TcpHeartbeatWorker:
         return host, int(port_s)
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(self._stop.wait(), timeout=seconds)
-        except asyncio.TimeoutError:
-            pass
 
     def stop(self) -> None:
         self._stop.set()

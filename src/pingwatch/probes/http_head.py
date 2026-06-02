@@ -62,7 +62,7 @@ class HttpHeadProbe(Probe):
             )
 
     async def run(self) -> AsyncIterator[PingSample]:
-        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))
+        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))  # noqa: S311  # non-cryptographic jitter/sampling
         try:
             while True:
                 t0 = time.monotonic()
@@ -71,7 +71,7 @@ class HttpHeadProbe(Probe):
                 interval_s = self.dest.interval_ms / 1000.0
                 sleep_for = interval_s - elapsed
                 if sleep_for > 0:
-                    jitter = random.uniform(-0.05, 0.05) * interval_s
+                    jitter = random.uniform(-0.05, 0.05) * interval_s  # noqa: S311  # non-cryptographic jitter/sampling
                     await asyncio.sleep(max(0.0, sleep_for + jitter))
         finally:
             if self._client is not None:

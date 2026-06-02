@@ -27,7 +27,7 @@ async def run_mtr(
     dest_id: int = 0,
     trigger: TraceTrigger = TraceTrigger.SCHEDULED,
     max_hops: int = 30,
-    timeout: float = 30.0,
+    timeout: float = 30.0,  # noqa: ASYNC109  # explicit timeout param is intentional
     cycles: int = 1,
 ) -> TraceSnapshot:
     """Run ``mtr --json -c <cycles> -n --max-ttl <hops> <host>`` and parse.
@@ -63,7 +63,7 @@ async def run_mtr(
 
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         with contextlib.suppress(ProcessLookupError):
             proc.kill()
         await proc.wait()
@@ -97,10 +97,7 @@ async def run_mtr(
 
 
 def parse_mtr_json(raw: bytes | str) -> list[TraceHop]:
-    if isinstance(raw, bytes):
-        text = raw.decode("utf-8", errors="replace")
-    else:
-        text = raw
+    text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -133,9 +130,13 @@ def parse_mtr_json(raw: bytes | str) -> list[TraceHop]:
                 hop_no=hop_no,
                 host=host_str,
                 ip=ip,
-                rtt_us=_ms_to_us(hub.get("Avg") or hub.get("avg") or hub.get("Last") or hub.get("last")),
+                rtt_us=_ms_to_us(
+                    hub.get("Avg") or hub.get("avg") or hub.get("Last") or hub.get("last")
+                ),
                 rtt_min_us=_ms_to_us(hub.get("Best") or hub.get("best")),
-                rtt_max_us=_ms_to_us(hub.get("Wrst") or hub.get("wrst") or hub.get("Worst") or hub.get("worst")),
+                rtt_max_us=_ms_to_us(
+                    hub.get("Wrst") or hub.get("wrst") or hub.get("Worst") or hub.get("worst")
+                ),
                 loss_pct=_to_float(hub.get("Loss%") or hub.get("loss") or hub.get("Loss")) or 0.0,
             )
         )

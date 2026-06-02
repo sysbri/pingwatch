@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 
 import aiosqlite
 import structlog
 
 from ..bus import Bus, get_bus
-from ..models import Destination, ProbeType
 from ..db import queries as q
+from ..models import Destination, ProbeType
 from .base import Probe
 from .dns_query import DnsQueryProbe
 from .http_head import HttpHeadProbe
@@ -84,10 +85,8 @@ class ProbeRunner:
         self._dests.pop(dest_id, None)
         if task is not None:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
 
     def _spawn(self, dest: Destination) -> None:
         probe = self._probe_factory(dest)
@@ -110,7 +109,7 @@ class ProbeRunner:
             while not self._stop_event.is_set():
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 key = msg.get("key", "") if isinstance(msg, dict) else ""
                 if key.startswith("destinations.") or key.startswith("probe."):
