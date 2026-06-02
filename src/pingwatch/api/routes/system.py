@@ -106,19 +106,30 @@ async def get_system(conn: ConnDep) -> SystemMetrics:
     )
 
 
-@router.post("/diagnose-bundle")
-async def diagnose_bundle(conn: ConnDep) -> StreamingResponse:  # noqa: ARG001
-    try:
-        from pingwatch.system import diagnose  # type: ignore[attr-defined]
+# GET so the frontend's `window.location = '/api/system/diagnose-bundle'` works.
+@router.get("/diagnose-bundle")
+async def diagnose_bundle(conn: ConnDep) -> StreamingResponse:
+    from pingwatch.export import zip_bundle
 
-        data = await diagnose.build_bundle()
+    try:
+        path = await zip_bundle.build_diagnose_bundle(conn)
     except Exception as exc:  # noqa: BLE001
+        log.exception("diagnose-bundle-failed")
         raise HTTPException(
             status_code=503,
-            detail=f"diagnose unavailable: {type(exc).__name__}",
+            detail=f"diagnose failed: {type(exc).__name__}",
         ) from exc
+
+    def _iter() -> Any:
+        try:
+            with open(path, "rb") as fh:
+                while chunk := fh.read(64 * 1024):
+                    yield chunk
+        finally:
+            path.unlink(missing_ok=True)
+
     return StreamingResponse(
-        iter([data]),
+        _iter(),
         media_type="application/zip",
         headers={
             "Content-Disposition": (
