@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 
 import aiosqlite
 import structlog
 
 from ..bus import Bus, get_bus
 from ..db import queries as q
-from ..models import Destination, ProbeType
+from ..models import Destination, PingSample, ProbeType
 from .base import Probe
 from .dns_query import DnsQueryProbe
 from .http_head import HttpHeadProbe
@@ -116,10 +116,10 @@ class ProbeRunner:
                     await self._reload()
 
 
-async def run_probe_once(dest: Destination) -> Awaitable[None]:
-    """Convenience for the Settings live-test button."""
+async def one_shot(dest: Destination) -> PingSample:
+    """Run a single probe attempt for the Settings live-test button."""
     probe = build_probe(dest)
-    return await probe.probe_once()  # type: ignore[return-value]
+    return await probe.probe_once()
 
 
 async def run_probe_runner(conn, bus) -> None:

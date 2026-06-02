@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, HTTPException, status
 
 from pingwatch.api import _queries_compat as q
@@ -18,8 +19,11 @@ from pingwatch.api.schemas import (
     TestResult,
 )
 from pingwatch.bus import get_bus
+from pingwatch.db import queries as dbq
 
 router = APIRouter(prefix="/api/targets", tags=["targets"])
+
+log = structlog.get_logger(__name__)
 
 
 def _to_out(row: dict[str, Any]) -> TargetOut:
@@ -133,29 +137,26 @@ async def reset_target_data(target_id: int, conn: ConnDep) -> OkResponse:
 
 @router.post("/{target_id}/test", response_model=TestResult)
 async def test_target(target_id: int, conn: ConnDep) -> TestResult:
-    """Run a one-shot probe synchronously and return the result.
-
-    The probe module is owned by another agent; we try to import it lazily and
-    gracefully fall back to a stub when not yet present.
-    """
-    row = await q.get_destination(conn, target_id)
-    if not row:
+    """Run a one-shot probe synchronously and return the result."""
+    dest = await dbq.get_destination(conn, target_id)
+    if dest is None:
         raise HTTPException(status_code=404, detail="target not found")
 
-    try:  # pragma: no cover - depends on parallel agent
-        from pingwatch.probes import runner as probe_runner  # type: ignore
+    from pingwatch.probes import runner as probe_runner
 
-        result = await probe_runner.one_shot(row)
-        return TestResult(
-            success=bool(result.success),
-            latency_us=result.latency_us,
-            error_kind=result.error_kind,
-            ts_ms=result.ts_ms,
-        )
+    try:
+        sample = await probe_runner.one_shot(dest)
     except Exception as exc:  # noqa: BLE001
+        log.exception("probe-test-failed", target_id=target_id)
         return TestResult(
             success=False,
             latency_us=None,
-            error_kind=f"probe_unavailable: {type(exc).__name__}",
+            error_kind=f"probe_error: {type(exc).__name__}",
             ts_ms=int(time.time() * 1000),
         )
+    return TestResult(
+        success=bool(sample.success),
+        latency_us=sample.latency_us,
+        error_kind=sample.error_kind,
+        ts_ms=sample.ts_ms,
+    )
