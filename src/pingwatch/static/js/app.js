@@ -85,6 +85,7 @@ function pingwatch() {
       this.loadSpeedtestHistory();
       this.connectDashboardWS();
       this.connectEventsWS();
+      this.startSettingsRefresh();
       // Theme + large-mode watcher: keep the .pw root in sync with settings.
       this.applyUiAttrs();
       this.$watch('settings', () => this.applyUiAttrs());
@@ -124,6 +125,18 @@ function pingwatch() {
       };
       tick();
       setInterval(tick, 1000);
+    },
+
+    startSettingsRefresh() {
+      // Settings rarely change, but they CAN change from another device or via
+      // the API. Re-fetch once a minute so display labels (e.g. the stream
+      // target on the dashboard) stay current without a manual kiosk reload.
+      // Skip while the Settings screen is open: the inputs bind to
+      // `settings[...]` via x-model, so a background refresh would clobber
+      // half-typed, unsaved input.
+      setInterval(() => {
+        if (this.currentScreen !== 'settings') this.loadSettings();
+      }, 60000);
     },
 
     // ---------- navigation ----------
