@@ -30,7 +30,7 @@ DEFAULT_SETTINGS: tuple[tuple[str, str, str], ...] = (
     ("uplink.min_externals", "2", "int"),
     ("wlan.reassoc_min_duration_ms", "2000", "int"),
     ("stream.enabled", "true", "bool"),
-    ("stream.endpoint", "https://speed.cloudflare.com/__down?bytes=99999999", "string"),
+    ("stream.endpoint", "https://nbg1-speed.hetzner.com/10GB.bin", "string"),
     ("stream.target_kbps", "20", "int"),
     ("stream.daily_cap_mb", "2048", "int"),
     ("stream.zero_kbps_min_samples", "1", "int"),

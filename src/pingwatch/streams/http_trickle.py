@@ -38,7 +38,7 @@ log = structlog.get_logger(__name__)
 
 @dataclass(slots=True)
 class StreamConfig:
-    endpoint: str = "https://speed.hetzner.de/10GB.bin"
+    endpoint: str = "https://nbg1-speed.hetzner.com/10GB.bin"
     target_kbps: int = 20
     daily_cap_mb: int = 2048
     zero_kbps_min_samples: int = 3
