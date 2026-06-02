@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import asyncio
-import random
 import time
-from collections.abc import AsyncIterator
 
 import httpx
-import structlog
 
 from ..models import Destination, PingSample
 from .base import Probe
-
-log = structlog.get_logger(__name__)
 
 
 def _normalize_url(address: str) -> str:
@@ -23,7 +17,6 @@ def _normalize_url(address: str) -> str:
 class HttpHeadProbe(Probe):
     def __init__(self, dest: Destination) -> None:
         super().__init__(dest)
-        self._sequence = 0
         self._url = _normalize_url(dest.address)
         self._client: httpx.AsyncClient | None = None
 
@@ -36,8 +29,7 @@ class HttpHeadProbe(Probe):
         return self._client
 
     async def probe_once(self) -> PingSample:
-        self._sequence += 1
-        seq = self._sequence
+        seq = self._next_seq()
         start_ms = int(time.time() * 1000)
         start = time.monotonic()
         client = self._get_client()
@@ -61,19 +53,7 @@ class HttpHeadProbe(Probe):
                 error_kind=type(exc).__name__,
             )
 
-    async def run(self) -> AsyncIterator[PingSample]:
-        await asyncio.sleep(random.uniform(0.0, self.dest.interval_ms / 1000.0))  # noqa: S311  # non-cryptographic jitter/sampling
-        try:
-            while True:
-                t0 = time.monotonic()
-                yield await self.probe_once()
-                elapsed = time.monotonic() - t0
-                interval_s = self.dest.interval_ms / 1000.0
-                sleep_for = interval_s - elapsed
-                if sleep_for > 0:
-                    jitter = random.uniform(-0.05, 0.05) * interval_s  # noqa: S311  # non-cryptographic jitter/sampling
-                    await asyncio.sleep(max(0.0, sleep_for + jitter))
-        finally:
-            if self._client is not None:
-                await self._client.aclose()
-                self._client = None
+    async def cleanup(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
