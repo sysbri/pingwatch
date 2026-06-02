@@ -142,19 +142,28 @@ async def serve() -> None:
             # Uvicorn (HTTP + WS) — drains gracefully via the shared stop event.
             tg.create_task(_run_uvicorn(settings, db, bus, stop), name="uvicorn")
 
+            # Shared metrics aggregator: owns rolling per-dest stats. The
+            # persister consults it to stamp FLAG_SPIKE at INSERT time; it also
+            # runs as its own worker below (same instance).
+            from pingwatch.metrics.aggregator import MetricsAggregator
+
+            aggregator = MetricsAggregator(conn, bus)
+
             # Persister: single writer to SQLite from bus topics.
             await _spawn_worker(
-                tg, workers, "persister", "pingwatch.probes.persister", "run_persister", conn, bus
+                tg, workers, "persister", "pingwatch.probes.persister",
+                "run_persister", conn, bus, flag_lookup=aggregator,
             )
             # Probe runner: 1 task per destination.
             await _spawn_worker(
                 tg, workers, "probe_runner",
                 "pingwatch.probes.runner", "run_probe_runner", conn, bus,
             )
-            # Metrics: rolling aggregator + hourly rollup writer.
+            # Metrics: rolling aggregator (shared instance) + hourly rollup.
             await _spawn_worker(
                 tg, workers, "metrics_aggregator",
                 "pingwatch.metrics.aggregator", "run_aggregator", conn, bus,
+                agg=aggregator,
             )
             await _spawn_worker(
                 tg, workers, "hourly_rollup",

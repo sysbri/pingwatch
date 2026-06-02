@@ -249,8 +249,8 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
-async def run_aggregator(conn, bus) -> None:
-    agg = MetricsAggregator(conn, bus)
+async def run_aggregator(conn, bus, agg: MetricsAggregator | None = None) -> None:
+    agg = agg or MetricsAggregator(conn, bus)
     await agg.start()
     try:
         await asyncio.Event().wait()

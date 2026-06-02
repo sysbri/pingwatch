@@ -102,8 +102,8 @@ class FlagLookup:
         return 0
 
 
-async def run_persister(conn, bus) -> None:
-    worker = PersisterWorker(conn, bus)
+async def run_persister(conn, bus, flag_lookup: FlagLookup | None = None) -> None:
+    worker = PersisterWorker(conn, bus, flag_lookup=flag_lookup)
     await worker.start()
     try:
         await asyncio.Event().wait()
