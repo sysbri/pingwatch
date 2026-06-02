@@ -10,12 +10,13 @@ so we never block the event loop for long. After deletes we run
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
 from dataclasses import dataclass
 
 import aiosqlite
 import structlog
+
+from pingwatch.util import sleep_or_stop
 
 log = structlog.get_logger(__name__)
 
@@ -141,8 +142,7 @@ class RetentionWorker:
         return now_ms - days * DAY_MS
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        await sleep_or_stop(self._stop, seconds)
 
     def stop(self) -> None:
         self._stop.set()

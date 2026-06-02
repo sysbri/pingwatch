@@ -16,7 +16,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from pingwatch.api.deps import ConnDep
+from pingwatch.api.deps import ConnDep, range_window
 from pingwatch.api.schemas import OkResponse
 from pingwatch.export import csv_exporter, db_snapshot, json_exporter, zip_bundle
 
@@ -25,19 +25,6 @@ log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 USB_ROOT = Path("/media/pingwatch-usb")
-
-
-def _window_ms(range_str: str | None) -> tuple[int, int]:
-    """Map a UI range token to an absolute (since_ms, until_ms) window."""
-    window = {
-        "1h": 3_600_000,
-        "24h": 86_400_000,
-        "7d": 7 * 86_400_000,
-        "30d": 30 * 86_400_000,
-        "all": 365 * 86_400_000,
-    }.get(range_str or "24h", 86_400_000)
-    now = int(time.time() * 1000)
-    return now - window, now
 
 
 def _iter_file(path: Path) -> Iterator[bytes]:
@@ -58,7 +45,7 @@ def _attachment(name: str) -> dict[str, str]:
 async def export_csv(
     conn: ConnDep, range: str = Query(default="24h"),  # noqa: A002
 ) -> StreamingResponse:
-    since, until = _window_ms(range)
+    since, until = range_window(range)
     body = await csv_exporter.export_outages_csv(conn, since, until)
     name = f"pingwatch-outages-{range}-{int(time.time())}.csv"
     return StreamingResponse(
@@ -70,7 +57,7 @@ async def export_csv(
 async def export_json(
     conn: ConnDep, range: str = Query(default="24h"),  # noqa: A002
 ) -> StreamingResponse:
-    since, until = _window_ms(range)
+    since, until = range_window(range)
     data = await json_exporter.export_all_json(conn, since, until)
     name = f"pingwatch-{range}-{int(time.time())}.json"
     return StreamingResponse(
@@ -82,7 +69,7 @@ async def export_json(
 async def export_zip(
     conn: ConnDep, range: str = Query(default="24h"),  # noqa: A002
 ) -> StreamingResponse:
-    since, until = _window_ms(range)
+    since, until = range_window(range)
     path = await zip_bundle.build_export_zip(conn, since, until)
     name = f"pingwatch-{range}-{int(time.time())}.zip"
     return StreamingResponse(
@@ -117,7 +104,7 @@ async def export_usb(
     range: str = Query(default="24h"),  # noqa: A002
     format: str = Query(default="zip"),  # noqa: A002
 ) -> OkResponse:
-    since, until = _window_ms(range)
+    since, until = range_window(range)
     try:
         path = await zip_bundle.write_export_to_usb(conn, since, until, USB_ROOT)
     except FileNotFoundError:

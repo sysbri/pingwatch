@@ -20,6 +20,7 @@ import structlog
 from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
 from pingwatch.models import HeartbeatEvent, HeartbeatEventType
+from pingwatch.util import sleep_or_stop
 
 log = structlog.get_logger(__name__)
 
@@ -147,8 +148,7 @@ class TcpHeartbeatWorker:
         return host, int(port_s)
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        await sleep_or_stop(self._stop, seconds)
 
     def stop(self) -> None:
         self._stop.set()

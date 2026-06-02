@@ -14,7 +14,6 @@ budget (``stream.daily_cap_mb``) is exhausted; it resumes the next day.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import datetime as dt
 import time
 import zoneinfo
@@ -27,6 +26,7 @@ from pingwatch.bus import Bus, get_bus
 from pingwatch.db import queries
 from pingwatch.models import OutageType, StreamEvent, StreamEventType, StreamSample
 from pingwatch.streams.speedtest import trickle_should_pause
+from pingwatch.util import sleep_or_stop
 
 log = structlog.get_logger(__name__)
 
@@ -235,8 +235,7 @@ class HttpTrickleWorker:
         return max(1.0, (midnight - now).total_seconds())
 
     async def _sleep_or_stop(self, seconds: float) -> None:
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        await sleep_or_stop(self._stop, seconds)
 
     def stop(self) -> None:
         self._stop.set()

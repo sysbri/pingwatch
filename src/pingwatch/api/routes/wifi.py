@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from pingwatch.api import host_fifo
-from pingwatch.api.deps import ConnDep
+from pingwatch.api.deps import RANGE_TO_MS, ConnDep
 
 router = APIRouter(prefix="/api/wifi", tags=["wifi"])
 
@@ -166,8 +166,7 @@ async def overview_endpoint(
     range_: str = Query(default="24h", alias="range"),
 ) -> dict[str, Any]:
     """WLAN-Detail-View payload: current + KPIs + series + events + APs."""
-    range_map = {"1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000}
-    window_ms = range_map.get(range_, 86_400_000)
+    window_ms = RANGE_TO_MS.get(range_, 86_400_000)
     now_ms = int(time.time() * 1000)
     since_ms = now_ms - window_ms
 
