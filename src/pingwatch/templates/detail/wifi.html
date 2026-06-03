@@ -81,22 +81,39 @@
   </div>
 
   <div class="pw-panel">
-    <div class="ph"><div class="pt">Sichtbare APs</div><div class="pr" x-text="((detail.wifi_overview && detail.wifi_overview.aps) || []).length + ' BSSIDs'"></div></div>
+    <div class="ph">
+      <div class="pt">Umgebungsscan</div>
+      <button type="button" class="mini-btn" :disabled="wifi.scanning" @click="scanNetworks()"
+              x-text="wifi.scanning ? 'scanne…' : ((wifi.sorted && wifi.sorted.length) ? 'neu scannen' : 'Scan starten')"></button>
+    </div>
     <div class="pb">
-      <template x-if="detail.wifi_overview && detail.wifi_overview.aps && detail.wifi_overview.aps.length">
-        <div class="wifi-ap-list">
-          <template x-for="ap in (detail.wifi_overview.aps || [])" :key="ap.bssid">
-            <div class="wifi-ap-row">
-              <div class="ap-ssid" x-text="ap.ssid || '(hidden)'"></div>
-              <div class="ap-bssid" x-text="ap.bssid"></div>
-              <div class="ap-rssi" x-text="(ap.avg_rssi != null ? Math.round(ap.avg_rssi) + ' dBm' : '—')"></div>
-              <div class="ap-seen" x-text="ap.seen_count + 'x'"></div>
-            </div>
-          </template>
-        </div>
+      <div x-show="wifi.lastError" class="env-err" x-text="wifi.lastError"></div>
+      <template x-if="!wifi.scanning && (!wifi.sorted || !wifi.sorted.length) && !wifi.lastError">
+        <div class="env-empty">Klick „Scan starten" um zu sehen, welche Netze in der Umgebung auf welchen Kanälen laufen.</div>
       </template>
-      <template x-if="!detail.wifi_overview || !detail.wifi_overview.aps || !detail.wifi_overview.aps.length">
-        <div style="font-size:11px;color:#6b7280;font-style:italic;padding:20px 0;text-align:center">keine APs im Fenster</div>
+      <template x-if="wifi.sorted && wifi.sorted.length">
+        <div class="env-scan">
+          <div class="ch-usage">
+            <div class="ch-usage-h">Kanalbelegung <span x-text="'· ' + wifi.sorted.length + ' APs'"></span></div>
+            <template x-for="c in (wifi.channelUsage || [])" :key="c.channel">
+              <div class="ch-row" :class="{ mine: detail.wifi_overview && detail.wifi_overview.current && detail.wifi_overview.current.channel === c.channel }">
+                <span class="ch-no">Ch <span x-text="c.channel"></span></span>
+                <span class="ch-band" x-text="c.band + 'G'"></span>
+                <span class="ch-bar"><span class="ch-bar-fill" :style="'width:' + c.pct + '%'"></span></span>
+                <span class="ch-cnt" x-text="c.count"></span>
+              </div>
+            </template>
+          </div>
+          <div class="env-ap-list">
+            <template x-for="ap in (wifi.sorted || [])" :key="ap.bssid">
+              <div class="env-ap-row" :class="{ mine: ap.in_use }">
+                <span class="ap-ssid" x-text="ap.ssid || '(hidden)'"></span>
+                <span class="ap-ch">Ch <span x-text="ap.channel"></span> · <span x-text="apBand(ap.freq) + 'G'"></span></span>
+                <span class="ap-sig" x-text="(ap.signal != null ? ap.signal + '%' : '—')"></span>
+              </div>
+            </template>
+          </div>
+        </div>
       </template>
     </div>
   </div>
