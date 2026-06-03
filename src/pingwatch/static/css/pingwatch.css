@@ -1225,8 +1225,8 @@ body .pw .pw-stream .stream-chart canvas {
   display: block !important;
 }
 /* Live-Stream chart: 1h/12h/24h range selector sits above the chart */
-body .pw .pw-stream .stream-mid { min-width: 0 !important; position: relative !important; }
-body .pw .pw-stream .stream-range { position: absolute; top: 3px; right: 3px; z-index: 2; display: flex; gap: 2px; background: #0d1320; border: 1px solid #1f2937; border-radius: 6px; padding: 2px; }
+body .pw .pw-stream .stream-mid { min-width: 0 !important; display: flex !important; flex-direction: column !important; justify-content: center !important; gap: 4px !important; }
+body .pw .pw-stream .stream-range { align-self: flex-end; display: flex; gap: 2px; background: #0d1320; border: 1px solid #1f2937; border-radius: 6px; padding: 2px; }
 body .pw .pw-stream .stream-range button { padding: 2px 9px; font-size: 10px; line-height: 1.5; background: transparent; border: none; color: #9ca3af; border-radius: 4px; cursor: pointer; font-weight: 600; }
 body .pw .pw-stream .stream-range button.active { background: #1f2937; color: #e5e7eb; }
 /* Detail-Übersicht: Chart-Canvas sichtbar machen */
