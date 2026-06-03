@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}PingWatch{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/pingwatch.css">
-  <script defer src="/static/vendor/chart.umd.min.js"></script>
-  <script defer src="/static/js/charts.js"></script>
-  <script defer src="/static/js/app.js"></script>
+  <link rel="stylesheet" href="{{ asset('css/pingwatch.css') }}">
+  <script defer src="{{ asset('vendor/chart.umd.min.js') }}"></script>
+  <script defer src="{{ asset('js/charts.js') }}"></script>
+  <script defer src="{{ asset('js/app.js') }}"></script>
   <!-- Alpine MUST be last — it self-starts via queueMicrotask right after this
        script executes, so all pingwatch()/Alpine.data() definitions must be in
        scope first. -->
-  <script defer src="/static/vendor/alpine.min.js"></script>
+  <script defer src="{{ asset('vendor/alpine.min.js') }}"></script>
 </head>
 <body>
   <div class="fhd-wrap" id="wrap">

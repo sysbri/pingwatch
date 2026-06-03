@@ -101,6 +101,19 @@ def build_app(*, db_path: str | None = None) -> FastAPI:
         app.state._db_path_override = db_path  # noqa: SLF001
 
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+    def _asset_url(path: str) -> str:
+        # Cache-busting static URL: append the file's mtime as ?v=... so a changed
+        # CSS/JS file (e.g. after a git pull on the Pi) gets a new URL and browsers
+        # fetch it fresh -- no manual hard-reload needed. Unchanged files keep a
+        # stable URL and stay cached.
+        try:
+            version = int((STATIC_DIR / path).stat().st_mtime)
+        except OSError:
+            version = 0
+        return f"/static/{path}?v={version}"
+
+    templates.env.globals["asset"] = _asset_url
     app.state.templates = templates
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

@@ -130,7 +130,10 @@
     // steady ~20 KB/s stream look like a comb of outages.
     const vals = series.map((p) => p.kbps || 0);
     const peak = vals.length ? Math.max(...vals) : 0;
-    const yMax = Math.max(10, Math.round(peak * 1.25));
+    // Round up to the next 25 KB/s -> at the default 20 KB/s stream the scale is
+    // a fixed 0-25, so a dip to e.g. 18 reads as a small wiggle near the top
+    // rather than looking like it crashed to zero.
+    const yMax = Math.max(25, Math.ceil(peak / 25) * 25);
     return new C(canvas, {
       type: 'line',
       data: {
@@ -166,7 +169,7 @@
           x: { display: false },
           y: {
             min: 0,
-            suggestedMax: yMax,
+            max: yMax,
             ticks: { color: '#6b7280', font: { size: 9 } },
             grid: { color: '#1f2937' },
           },
