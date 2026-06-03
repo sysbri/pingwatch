@@ -5,9 +5,9 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
-from pingwatch.api.deps import ConnDep
+from pingwatch.api.deps import RANGE_TO_MS, ConnDep
 from pingwatch.db import queries as q
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -232,3 +232,45 @@ def _classify(kpi: dict[str, Any]) -> str:
 @router.get("/dashboard")
 async def get_dashboard(conn: ConnDep) -> dict[str, Any]:
     return await build_dashboard_payload(conn)
+
+
+@router.get("/stream/series")
+async def get_stream_series(
+    conn: ConnDep,
+    range_: str = Query(default="1h", alias="range"),
+) -> dict[str, Any]:
+    """Downsampled stream-throughput series + drop markers for a time window.
+
+    Feeds the dashboard live-stream chart's 1h/12h/24h selector. Samples are
+    1 Hz, so long windows are averaged into ~300 buckets to keep the payload and
+    the chart light.
+    """
+    window_ms = RANGE_TO_MS.get(range_, RANGE_TO_MS["1h"])
+    now_ms = int(time.time() * 1000)
+    since_ms = now_ms - window_ms
+    bucket_ms = max(1000, window_ms // 300)
+    scur = await conn.execute(
+        "SELECT MIN(ts_ms) AS ts_ms, CAST(ROUND(AVG(kbps)) AS INTEGER) AS kbps "
+        "FROM stream_throughput_samples WHERE ts_ms >= ? "
+        "GROUP BY ts_ms / ? ORDER BY ts_ms ASC",
+        (since_ms, bucket_ms),
+    )
+    series = [
+        {"ts_ms": int(r["ts_ms"]), "kbps": int(r["kbps"] or 0)} for r in await scur.fetchall()
+    ]
+    dcur = await conn.execute(
+        "SELECT ts_ms, duration_ms FROM stream_events "
+        "WHERE event_type = 'drop' AND ts_ms >= ? ORDER BY ts_ms ASC",
+        (since_ms,),
+    )
+    drops = [
+        {"ts_ms": int(r["ts_ms"]), "duration_ms": r["duration_ms"]}
+        for r in await dcur.fetchall()
+    ]
+    return {
+        "range": range_,
+        "since_ms": since_ms,
+        "now_ms": now_ms,
+        "series": series,
+        "drops": drops,
+    }

@@ -55,6 +55,20 @@ def test_dashboard_endpoint(client: TestClient) -> None:
         assert k in data
 
 
+def test_stream_series(client: TestClient) -> None:
+    # Default range + each selectable window must return a well-formed payload.
+    for range_ in (None, "1h", "12h", "24h"):
+        url = "/api/stream/series" + (f"?range={range_}" if range_ else "")
+        r = client.get(url)
+        assert r.status_code == 200, url
+        data = r.json()
+        assert isinstance(data["series"], list)
+        assert isinstance(data["drops"], list)
+        assert data["since_ms"] < data["now_ms"]
+    # Echoes the requested range token.
+    assert client.get("/api/stream/series?range=12h").json()["range"] == "12h"
+
+
 def test_targets_crud(client: TestClient) -> None:
     r = client.get("/api/targets")
     assert r.status_code == 200
