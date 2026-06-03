@@ -71,6 +71,9 @@ function pingwatch() {
     wifi: {
       status: null,           // { connected, ssid, signal_pct, rssi_dbm, bitrate_mbps, freq }
       networks: [],
+      channelUsage: [],       // [{ channel, band, count, pct }] for the env scan
+      sorted: [],             // networks sorted by signal (env scan)
+      scanTs: null,
       scanning: false,
       connecting: null,       // ssid wenn gerade ein Connect laeuft
       lastError: null,
@@ -654,11 +657,38 @@ function pingwatch() {
         if (!r.ok) throw new Error('Scan fehlgeschlagen');
         const j = await r.json();
         this.wifi.networks = j.networks || [];
+        this.wifi.scanTs = j.ts_ms || Date.now();
+        this._computeWifiEnv();
       } catch (e) {
         this.wifi.lastError = String(e.message || e);
       } finally {
         this.wifi.scanning = false;
       }
+    },
+
+    apBand(freq) {
+      if (!freq) return '';
+      if (freq < 2500) return '2.4';
+      if (freq < 5925) return '5';
+      return '6';
+    },
+
+    // Derive the env-scan views (channel occupancy + signal-sorted list) once
+    // per scan so the templates don't recompute on every render.
+    _computeWifiEnv() {
+      const nets = this.wifi.networks || [];
+      const byCh = {};
+      for (const n of nets) {
+        const ch = n.channel || 0;
+        if (!ch) continue;
+        if (!byCh[ch]) byCh[ch] = { channel: ch, band: this.apBand(n.freq), count: 0 };
+        byCh[ch].count++;
+      }
+      const usage = Object.values(byCh).sort((a, b) => b.count - a.count || a.channel - b.channel);
+      const max = usage.reduce((m, c) => Math.max(m, c.count), 1);
+      usage.forEach((c) => { c.pct = Math.round((c.count / max) * 100); });
+      this.wifi.channelUsage = usage;
+      this.wifi.sorted = [...nets].sort((a, b) => (b.signal || 0) - (a.signal || 0));
     },
     openConnectModal(net) {
       this.wifi.modalSsid = net.ssid;
