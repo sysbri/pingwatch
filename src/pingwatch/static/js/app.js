@@ -89,19 +89,14 @@ function pingwatch() {
       // Theme + large-mode watcher: keep the .pw root in sync with settings.
       this.applyUiAttrs();
       this.$watch('settings', () => this.applyUiAttrs());
-      // FIX 10: respect deep-link to a settings sub-screen on cold load and
-      // when the hash changes from the browser back/forward buttons.
-      const applyHash = () => {
-        const h = (window.location.hash || '').replace(/^#/, '');
-        const m = h.match(/^settings\/(.+)$/);
-        if (m) {
-          this.currentScreen = 'settings';
-          this.settings_sub = m[1];
-          if (m[1] === 'system') this.loadSystem();
-        }
-      };
-      applyHash();
-      window.addEventListener('hashchange', applyHash);
+      // Always start on the dashboard. A previous Settings visit can leave a
+      // "#settings/..." hash in the URL; clear it so reloading the page never
+      // dumps you back into Settings -- a refresh should land "home".
+      if (window.location.hash) {
+        try {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch (e) { /* */ }
+      }
     },
 
     applyUiAttrs() {
@@ -160,12 +155,12 @@ function pingwatch() {
     },
 
     switchSettingsSub(name) {
-      // FIX 10: ensure the user lands on the settings screen even when this
-      // function is invoked from outside the settings context (sidebar click
-      // before the screen swap finished, deep-link, etc.).
+      // Ensure we land on the settings screen even when invoked from outside
+      // the settings context (e.g. a sidebar click before the screen swap).
+      // We intentionally do NOT write the URL hash: a reload should always go
+      // to the dashboard, not back into the last-open settings sub-screen.
       this.currentScreen = 'settings';
       this.settings_sub = name;
-      try { window.location.hash = '#settings/' + name; } catch (e) { /* */ }
       if (name === 'system') this.loadSystem();
       if (name === 'wlan') this.loadWifiStatus();
     },
