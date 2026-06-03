@@ -43,7 +43,10 @@ class StreamConfig:
     daily_cap_mb: int = 2048
     zero_kbps_min_samples: int = 3
     timezone: str = "Europe/Berlin"
-    chunk_size: int = 4096
+    # Small chunks = many reads/sec = fine pacing granularity, so each 1 s
+    # throughput sample isn't quantized to a few large chunks (which made the
+    # live chart look like a sawtooth). At 20 KB/s this is ~20 reads/sec.
+    chunk_size: int = 1024
     backoff_initial_s: float = 1.0
     backoff_max_s: float = 30.0
 
@@ -150,6 +153,10 @@ class HttpTrickleWorker:
                     if gap_ms > 2000:
                         await self._publish_event(StreamEventType.RECONNECT)
                 self._was_connected = True
+            # Drift-free pacer: schedule each read at an absolute target time so
+            # the long-term rate matches target_kbps regardless of per-chunk
+            # read/processing overhead (a fixed per-chunk sleep would undershoot).
+            next_tick = time.perf_counter()
             async for piece in response.aiter_bytes(chunk_size=chunk):
                 if self._stop.is_set():
                     return
@@ -161,6 +168,7 @@ class HttpTrickleWorker:
                 if trickle_should_pause():
                     await asyncio.sleep(0.5)
                     self._was_connected = False
+                    next_tick = time.perf_counter()
                     continue
                 state.bytes_in_window += len(piece)
                 state.bytes_total += len(piece)
@@ -171,10 +179,17 @@ class HttpTrickleWorker:
                     if await self._budget_exceeded():
                         log.info("stream.budget_reached_mid_stream")
                         return
-                await asyncio.sleep(chunk_period_s)
+                next_tick += chunk_period_s
+                delay = next_tick - time.perf_counter()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                else:
+                    # Fell behind (slow read); reset so we don't accumulate debt
+                    # and then burst to "catch up".
+                    next_tick = time.perf_counter()
 
     async def _flush_window(self, state: _WindowState, window_end_ms: int) -> None:
-        kbps = state.bytes_in_window // 1024
+        kbps = round(state.bytes_in_window / 1024)
         sample = StreamSample(
             ts_ms=window_end_ms,
             kbps=kbps,

@@ -124,6 +124,13 @@
   function streamThroughputChart(canvas, series, drops) {
     const C = _maybeChart();
     if (!C || !canvas) return null;
+    // Stable y-axis: pin the bottom at 0 and leave headroom above the peak.
+    // Without an explicit min, Chart.js auto-fits the axis to the data's
+    // min/max, which zooms into the 1-2 KB measurement ripple and makes a
+    // steady ~20 KB/s stream look like a comb of outages.
+    const vals = series.map((p) => p.kbps || 0);
+    const peak = vals.length ? Math.max(...vals) : 0;
+    const yMax = Math.max(10, Math.round(peak * 1.25));
     return new C(canvas, {
       type: 'line',
       data: {
@@ -157,7 +164,12 @@
         plugins: { legend: { display: false } },
         scales: {
           x: { display: false },
-          y: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { color: '#1f2937' } },
+          y: {
+            min: 0,
+            suggestedMax: yMax,
+            ticks: { color: '#6b7280', font: { size: 9 } },
+            grid: { color: '#1f2937' },
+          },
         },
       },
     });
