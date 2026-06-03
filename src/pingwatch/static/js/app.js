@@ -61,6 +61,9 @@ function pingwatch() {
     newTarget: { name: '', address: '', type: 'ICMP', kind: 'external', interval_ms: 1000, timeout_ms: 2000, enabled: true, ordering: 0 },
     system: {},
     exportRange: '24h',
+    streamRange: '1h',
+    streamSeries: [],
+    streamDrops: [],
     exportBusy: null,
     usbAvailable: null,
     toast: null,
@@ -86,6 +89,12 @@ function pingwatch() {
       this.connectDashboardWS();
       this.connectEventsWS();
       this.startSettingsRefresh();
+      this.loadStreamSeries();
+      // Keep the stream chart fresh on its selected window (only while the
+      // dashboard is visible — the canvas doesn't exist on other screens).
+      setInterval(() => {
+        if (this.currentScreen === 'dashboard') this.loadStreamSeries();
+      }, 10000);
       // Theme + large-mode watcher: keep the .pw root in sync with settings.
       this.applyUiAttrs();
       this.$watch('settings', () => this.applyUiAttrs());
@@ -177,8 +186,27 @@ function pingwatch() {
         const res = await fetch('/api/dashboard');
         if (res.ok) this.dashboard = await res.json();
       } catch (e) { console.warn('dashboard fetch failed', e); }
-      // FIX 1: initialize Chart.js stream-throughput canvas after data arrives.
+    },
+
+    // The stream chart is driven by its own range-aware series (1h/12h/24h),
+    // independent of the live dashboard payload, so the WebSocket tick can keep
+    // updating the numbers without clobbering the selected window.
+    async loadStreamSeries() {
+      try {
+        const r = await fetch('/api/stream/series?range=' + encodeURIComponent(this.streamRange));
+        if (r.ok) {
+          const d = await r.json();
+          this.streamSeries = d.series || [];
+          this.streamDrops = d.drops || [];
+        }
+      } catch (e) { /* */ }
       this.$nextTick(() => this._renderStreamChart());
+    },
+
+    setStreamRange(r) {
+      if (this.streamRange === r) return;
+      this.streamRange = r;
+      this.loadStreamSeries();
     },
 
     _renderStreamChart() {
@@ -187,8 +215,8 @@ function pingwatch() {
       try { this._streamChart && this._streamChart.destroy && this._streamChart.destroy(); } catch (e) { /* */ }
       this._streamChart = window.PingWatchCharts.streamThroughputChart(
         sc,
-        (this.dashboard.stream && this.dashboard.stream.series) || [],
-        (this.dashboard.stream && this.dashboard.stream.drops) || [],
+        this.streamSeries || [],
+        this.streamDrops || [],
       );
     },
 

@@ -45,8 +45,15 @@
       Ziel: <b x-text="(settings['stream.endpoint'] || 'speed.cloudflare.com').replace(/^https?:\/\//,'').split('/')[0]"></b>
     </div>
   </div>
-  <div class="stream-chart">
-    <canvas id="stream-chart-canvas"></canvas>
+  <div class="stream-mid">
+    <div class="range stream-range" @click.stop>
+      <button type="button" :class="{ active: streamRange === '1h' }" @click.prevent="setStreamRange('1h')">1h</button>
+      <button type="button" :class="{ active: streamRange === '12h' }" @click.prevent="setStreamRange('12h')">12h</button>
+      <button type="button" :class="{ active: streamRange === '24h' }" @click.prevent="setStreamRange('24h')">24h</button>
+    </div>
+    <div class="stream-chart">
+      <canvas id="stream-chart-canvas"></canvas>
+    </div>
   </div>
   <div class="stream-r">
     <div class="r"><span class="lbl">Drops/h</span><span class="val amber" x-text="(dashboard.stream && dashboard.stream.drops_count) || 0"></span></div>
