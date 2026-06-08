@@ -79,6 +79,7 @@ class WifiMonitor:
         self._stop = asyncio.Event()
         self._prev_snapshot: WifiSnapshot | None = None
         self._pending_disconnect_ts: int | None = None
+        self._prev_interface: str | None = None
         self._status_path = Path(self._cfg.status_file)
 
     async def run(self) -> None:
@@ -117,6 +118,13 @@ class WifiMonitor:
             await queries.insert_wifi_event(self._conn, ev)
             await self._bus.publish("wifi.events", ev)
         self._prev_snapshot = snap
+        if snap.interface and snap.interface != self._prev_interface:
+            if self._prev_interface is not None:
+                await queries.insert_source_switch(
+                    self._conn, snap.ts_ms, self._prev_interface, snap.interface
+                )
+                await self._bus.publish("wifi.source_switch", snap)
+            self._prev_interface = snap.interface
 
     async def _coalesce_reassoc(
         self, events: list[WifiEvent], snap: WifiSnapshot
