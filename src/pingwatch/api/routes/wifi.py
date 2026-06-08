@@ -13,6 +13,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 
 from pingwatch.api import host_fifo
 from pingwatch.api.deps import RANGE_TO_MS, ConnDep
+from pingwatch.db import queries
 
 router = APIRouter(prefix="/api/wifi", tags=["wifi"])
 
@@ -182,6 +183,8 @@ async def overview_endpoint(
         "channel": live.get("channel"),
         "connected": bool(live.get("connected")),
         "security": live.get("security"),
+        "interface": live.get("interface"),
+        "interface_label": live.get("interface_label"),
     }
 
     # --- KPI: RSSI stats ---
@@ -240,6 +243,12 @@ async def overview_endpoint(
     else:
         series = raw_series
 
+    # --- Link-Rate-Serie (kbps; null-Werte übersprungen) ---
+    link_series = [
+        {"ts_ms": ts, "link_rate_kbps": kbps}
+        for ts, kbps in await queries.link_rate_series(conn, since_ms)
+    ]
+
     # --- Events (letzte 50 im Fenster) ---
     evcur = await conn.execute(
         "SELECT id, ts_ms, event_type, ssid, bssid, rssi, channel, duration_ms "
@@ -263,6 +272,8 @@ async def overview_endpoint(
             d["avg_rssi"] = round(float(d["avg_rssi"]), 1)
         aps.append(d)
 
+    source_switches = await queries.source_switches(conn, since_ms)
+
     return {
         "range": range_,
         "since_ms": since_ms,
@@ -272,4 +283,6 @@ async def overview_endpoint(
         "series": series,
         "events": events,
         "aps": aps,
+        "link_series": link_series,
+        "source_switches": source_switches,
     }
