@@ -115,3 +115,16 @@ async def source_switches(
     rows = await cur.fetchall()
     await cur.close()
     return [dict(r) for r in rows]
+
+
+async def link_rate_series(
+    conn: aiosqlite.Connection, since_ms: int
+) -> list[tuple[int, int]]:
+    cur = await conn.execute(
+        "SELECT ts_ms, link_rate_kbps FROM wifi_rssi_samples "
+        "WHERE ts_ms >= ? AND link_rate_kbps IS NOT NULL ORDER BY ts_ms ASC",
+        (since_ms,),
+    )
+    rows = await cur.fetchall()
+    await cur.close()
+    return [(r["ts_ms"], r["link_rate_kbps"]) for r in rows]
