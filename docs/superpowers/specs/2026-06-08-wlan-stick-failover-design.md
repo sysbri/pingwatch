@@ -1,7 +1,7 @@
 # WLAN-Stick als bevorzugte Verbindung mit Auto-Failover
 
 **Datum:** 2026-06-08
-**Status:** Design freigegeben, Implementierungsplan ausstehend
+**Status:** Design freigegeben; gegen aktuellen Code (origin/main @ `32f0350`) re-verifiziert; Implementierungsplan ausstehend
 **Repo:** pingwatch (`~/Desktop/ping-monitor-project/pingwatch`, `github.com/sysbri/pingwatch`)
 
 ## Ziel
@@ -31,17 +31,27 @@ und zeigt zusätzlich zur RSSI auch die **ausgehandelte Link-Rate live** an.
 - **Container** läuft `network_mode: host` und sieht alle Host-Interfaces direkt;
   `/sys/class/net` ist read-only nach `/host/sys/class/net` gemountet
   (`docker/docker-compose.yml`).
-- **Monitor** (`src/pingwatch/wifi/monitor.py`): liest die Assoziation via
-  nl80211 (primär) bzw. `iw` (Fallback). `run_wifi_monitor` startet
-  `WifiMonitor(conn, bus)` **ohne Config** → Interface ist hart `wlan0`
-  (`WifiConfig`-Default). Die Settings-`wifi.interface` wird zwar gelesen, aber
-  **nie an den Monitor durchgereicht**.
-- `link_rate_kbps` wird im **iw-Pfad** geparst (`rx bitrate`), im
-  **nl80211-Pfad** auf `None` gesetzt → Link-Rate oft leer, obwohl nl80211 der
-  bevorzugte Pfad ist.
-- **Host-Helper** (`deploy/pingwatch-host-helper.sh`): `wifi_status` ruft hart
-  `iw dev wlan0 link`; `wifi_scan`/`wifi_connect`/`wifi_forget` nutzen
-  `nmcli dev wifi …` **ohne** `ifname` (NM wählt das Default-Gerät).
+- **Datenfluss auf dem Pi (wichtig, geändert ggü. erster Annahme):** Der
+  In-Container-**Monitor liest das Radio nicht direkt**. Der **Host-Helper**
+  betreibt einen **1-Hz-`wifi_status_loop`**, der `iw dev "$WLAN_IF" link` liest
+  und atomar `/run/pingwatch-shared/wifi-status.json` schreibt (inkl. SSID, RSSI,
+  **Bitrate**, Channel, Freq). Der Monitor (`wifi/monitor.py:_sample_from_file`)
+  liest diese JSON — das ist der **Produktionspfad** auf der Appliance. Die
+  direkten nl80211-/`iw`-Pfade (`_sample_nl80211`/`_sample_iw`) sind nur noch
+  **Dev/CI-Fallback**.
+- **Monitor-Interface:** `run_wifi_monitor` startet `WifiMonitor(conn, bus)`
+  **ohne Config** → `WifiConfig`-Default `wlan0`; `settings.wifi.interface` wird
+  gelesen, aber **nicht durchgereicht** (`wifi/monitor.py:~372`, `main.py:~187`).
+- **Host-Helper** (`deploy/pingwatch-host-helper.sh`): nutzt bereits
+  `WLAN_IF="${PINGWATCH_WLAN_IF:-wlan0}"` (env-konfigurierbar, Default `wlan0`)
+  für `wifi_status_loop`. `wifi_scan`/`wifi_connect`/`wifi_forget` nutzen aber
+  weiter `nmcli dev wifi …` **ohne** `ifname` (NM wählt das Gerät).
+- **Link-Rate:** auf dem Produktionspfad (`_sample_from_file`, aus der
+  Host-Helper-`bitrate`) **bereits vorhanden** und in `wifi_rssi_samples.
+  link_rate_kbps` persistiert; nur der nl80211-Dev-Fallback liefert sie nicht.
+- **DB-Inserts:** `insert_rssi_sample`/`insert_wifi_event` liegen nach dem
+  Refactor in `src/pingwatch/db/q_wifi.py` (Re-Export-Facade `db/queries.py`),
+  Signaturen ohne Interface-Parameter.
 - `wifi.expected_ssid` existiert in den Settings, wird aber **nirgends benutzt**.
 - **DB:** ein `schema.sql` (via `executescript`, alle `CREATE TABLE IF NOT
   EXISTS`) + `schema_version`-Tabelle (Wert 1). **Kein** Migrations-Framework.
@@ -70,9 +80,12 @@ und zeigt zusätzlich zur RSSI auch die **ausgehandelte Link-Rate live** an.
 - Liefert das **eine aktive Interface**: ein USB-WLAN wenn vorhanden, sonst
   `wlan0` (bzw. den konfigurierten Fallback), sonst das erste WLAN-Interface.
   Zusätzlich ein Label (`usb` / `intern`) und den Interface-Namen für die Anzeige.
-- `__main__`, das den Namen ausgibt, damit der Host-Helper (bash) denselben
-  Resolver nutzen kann (`PYTHONPATH=/opt/pingwatch/src python3 -m pingwatch.netif
-  --sysfs /sys/class/net`). Single Source of Truth.
+- `__main__`, das den Namen ausgibt, sodass der **Host-Helper** (bash) den
+  Resolver pro Status-Tick aufruft, um das zu lesende Interface zu wählen
+  (`PYTHONPATH=/opt/pingwatch/src python3 -m pingwatch.netif --sysfs
+  /sys/class/net`). Damit ist der Resolver die Single Source of Truth für „welche
+  Antenne ist aktiv" — sowohl fürs Messen (Host-Helper-Loop) als auch fürs
+  Verbinden (`wifi_prefer_stick`).
 - Reiner Logik-Anteil → über ein Sysfs-Fixture-Verzeichnis unit-testbar.
 
 ### 2. Route-Failover über NetworkManager (Kern des Features)
@@ -92,10 +105,18 @@ und zeigt zusätzlich zur RSSI auch die **ausgehandelte Link-Rate live** an.
   persistente NM-Profil (USB-Sticks bekommen i.d.R. stabile `wlx<MAC>`-Namen).
 - udev `remove` ist optional (Profil-Cleanup); fürs Failover nicht nötig.
 
-### 3. Monitor folgt dem aktiven Interface — Single-Source
+### 3. Aktives Interface fürs Messen — im Host-Helper-Loop, nicht im Container
 
-- `run_wifi_monitor` / `WifiMonitor` fragen pro 1-Hz-Tick den Resolver nach dem
-  aktiven Interface und sampeln dieses. Hotplug ergibt sich automatisch.
+- Die Interface-Auswahl fürs **Messen** sitzt im **`wifi_status_loop`** des
+  Host-Helpers: pro Tick den Resolver fragen (USB bevorzugt, sonst `wlan0`),
+  `iw dev <aktiv> link` lesen und in `wifi-status.json` zusätzlich das **aktive
+  Interface** (`interface`, Label) stempeln. Hotplug ergibt sich automatisch, da
+  der Loop jede Sekunde neu auflöst.
+- Der **Container-Monitor** (`_sample_from_file`) liest RSSI/Link-Rate **und** das
+  `interface`-Feld aus der JSON. Ändert sich das Feld (Stick ↔ onboard), schreibt
+  er den Antennenwechsel-Marker (s.u.). Single-Source bleibt: pro Zeitpunkt genau
+  eine aktive Antenne. (Der direkte nl80211/`iw`-Pfad — Dev/CI — bekommt dieselbe
+  Resolver-Logik, damit Tests den Switch abdecken.)
 - **Interface-Wechsel-Marker:** Wechselt das aktive Interface (Stick ↔ onboard),
   wird ein Eintrag in eine **neue additive Tabelle**
   `wifi_source_switches(ts_ms, from_if, to_if)` geschrieben (ergänzt als
@@ -110,8 +131,10 @@ und zeigt zusätzlich zur RSSI auch die **ausgehandelte Link-Rate live** an.
 ### 4. Link-Speed live im Dashboard — umschaltbar im selben Fenster
 
 - Der `/api/wifi/overview`-Endpoint liefert **beide** Serien (RSSI **und**
-  `link_rate_kbps`) sowie beide Live-Werte. Daten kommen aus
-  `wifi_rssi_samples` (link_rate ist dort bereits gespeichert).
+  `link_rate_kbps`) sowie beide Live-Werte. `link_rate_kbps` wird auf dem
+  Produktionspfad bereits in `wifi_rssi_samples` persistiert — die Endpoint-
+  Änderung ist also nur, die Link-Rate-Serie **zusätzlich** mitzuliefern (heute
+  liefert er nur RSSI).
 - Im Dashboard wird **dasselbe** Chart und **dieselbe** Kachel verwendet wie für
   RSSI, mit einem **Umschalter „RSSI ⇄ Link-Speed"**. Es wird immer nur die
   gewählte Metrik gezeigt — kein zweites Chart, keine zweite Kachel. Achsen-
@@ -120,9 +143,12 @@ und zeigt zusätzlich zur RSSI auch die **ausgehandelte Link-Rate live** an.
 
 ### 5. Host-Helper + Dashboard auf aktives Interface
 
-- `wifi_status`/`scan`/`connect` zielen aufs vom Resolver gelieferte aktive
-  Interface statt hart `wlan0` (`iw dev <if>`, `nmcli … ifname <if>`).
-- Dashboard zeigt die **Quelle** an: „Stick (wlx…)" bzw. „Intern (wlan0)". Die
+- `wifi_status_loop` löst das aktive Interface auf (Abschnitt 3) und stempelt es
+  in `wifi-status.json`. `wifi_connect` bekommt `ifname <if>` (gezielt aufs aktive
+  Interface). `wifi_scan` bleibt interface-agnostisch (`nmcli dev wifi list` zeigt
+  alle sichtbaren APs — passt zum bestehenden „Umgebungsscan").
+- Dashboard zeigt die **Quelle** an: „Stick (wlx…)" bzw. „Intern (wlan0)" (aus dem
+  neuen `interface`-Feld der Status-JSON / `overview.current`). Die
   RSSI-Kachel/-Chart bekommt den RSSI-⇄-Link-Speed-Umschalter aus Abschnitt 4
   (keine separate Link-Speed-Anzeige).
 
