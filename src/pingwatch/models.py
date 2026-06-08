@@ -117,6 +117,7 @@ class WifiSnapshot:
     channel: int | None
     link_rate_kbps: int | None
     associated: bool
+    interface: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

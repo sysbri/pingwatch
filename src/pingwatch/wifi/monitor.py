@@ -189,15 +189,11 @@ class WifiMonitor:
             return None
         file_ts = data.get("ts_ms")
         ts = int(file_ts) if isinstance(file_ts, (int, float)) else ts_ms
+        iface = data.get("interface")
         if not data.get("connected"):
             return WifiSnapshot(
-                ts_ms=ts,
-                ssid=None,
-                bssid=None,
-                rssi=None,
-                channel=None,
-                link_rate_kbps=None,
-                associated=False,
+                ts_ms=ts, ssid=None, bssid=None, rssi=None, channel=None,
+                link_rate_kbps=None, associated=False, interface=iface,
             )
         rssi = data.get("rssi_dbm")
         if rssi is None:
@@ -211,6 +207,7 @@ class WifiMonitor:
             channel=data.get("channel"),
             link_rate_kbps=int(float(bitrate) * 1000) if bitrate is not None else None,
             associated=True,
+            interface=iface,
         )
 
     def _sample_nl80211(self, ts_ms: int) -> WifiSnapshot:  # pragma: no cover - hw-dependent
@@ -229,6 +226,7 @@ class WifiMonitor:
                     channel=None,
                     link_rate_kbps=None,
                     associated=False,
+                    interface=self._cfg.interface,
                 )
             scan = nl.get_associated_bss(ifidx) or []
             if not scan:
@@ -240,6 +238,7 @@ class WifiMonitor:
                     channel=None,
                     link_rate_kbps=None,
                     associated=False,
+                    interface=self._cfg.interface,
                 )
             entry = scan[0]
             attrs = dict(entry.get("attrs", []))
@@ -256,6 +255,7 @@ class WifiMonitor:
                 channel=_freq_to_channel(bss.get("NL80211_BSS_FREQUENCY")),
                 link_rate_kbps=None,
                 associated=True,
+                interface=self._cfg.interface,
             )
         finally:
             with contextlib.suppress(Exception):
@@ -281,6 +281,7 @@ class WifiMonitor:
                 channel=None,
                 link_rate_kbps=None,
                 associated=False,
+                interface=self._cfg.interface,
             )
         ssid = _match1(_IW_LINK_RE["ssid"], text)
         bssid = _match1(_IW_LINK_RE["bssid"], text)
@@ -295,6 +296,7 @@ class WifiMonitor:
             channel=_freq_to_channel(freq) if freq is not None else None,
             link_rate_kbps=int(rx_mbit * 1000) if rx_mbit is not None else None,
             associated=True,
+            interface=self._cfg.interface,
         )
 
     async def _iw_event_loop(self) -> None:
