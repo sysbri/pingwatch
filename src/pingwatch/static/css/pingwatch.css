@@ -240,7 +240,7 @@
   .ping-log .ph .live-tag::before { content: '●'; margin-right: 4px; animation: pulse 1.4s infinite; }
   .ping-stream { font-family: 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5; }
   .ping-stream div { color: #d1d5db; padding: 1px 0; }
-  .ping-stream .t { color: #6b7280; }
+  .ping-stream .t { color: #6b7280; margin-right: 6px; }
   .ping-stream .ok { color: #9ca3af; }
   .ping-stream .warn { color: #fbbf24; }
   .ping-stream .fail { color: #f87171; }
