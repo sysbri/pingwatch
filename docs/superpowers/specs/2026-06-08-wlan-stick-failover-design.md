@@ -107,17 +107,24 @@ und zeigt zusätzlich zur RSSI auch die **ausgehandelte Link-Rate live** an.
 - `link_rate_kbps` wird auch auf dem **nl80211-Pfad** befüllt (Station-Info /
   Bitrate), sonst Fallback-Lesung der Bitrate via `iw dev <if> link`.
 
-### 4. Link-Speed live im Dashboard
+### 4. Link-Speed live im Dashboard — umschaltbar im selben Fenster
 
-- `link_rate_kbps` als **Live-Kachel** und als **Verlaufs-Serie** (neben RSSI)
-  über den `/api/wifi/overview`-Endpoint. Eine Spur = das aktive Interface.
+- Der `/api/wifi/overview`-Endpoint liefert **beide** Serien (RSSI **und**
+  `link_rate_kbps`) sowie beide Live-Werte. Daten kommen aus
+  `wifi_rssi_samples` (link_rate ist dort bereits gespeichert).
+- Im Dashboard wird **dasselbe** Chart und **dieselbe** Kachel verwendet wie für
+  RSSI, mit einem **Umschalter „RSSI ⇄ Link-Speed"**. Es wird immer nur die
+  gewählte Metrik gezeigt — kein zweites Chart, keine zweite Kachel. Achsen-
+  Beschriftung/Einheit (dBm bzw. MBit/s) wechselt mit. Eine Spur = das aktive
+  Interface.
 
 ### 5. Host-Helper + Dashboard auf aktives Interface
 
 - `wifi_status`/`scan`/`connect` zielen aufs vom Resolver gelieferte aktive
   Interface statt hart `wlan0` (`iw dev <if>`, `nmcli … ifname <if>`).
-- Dashboard zeigt die **Quelle** an: „Stick (wlx…)" bzw. „Intern (wlan0)", plus
-  die Link-Speed-Anzeige.
+- Dashboard zeigt die **Quelle** an: „Stick (wlx…)" bzw. „Intern (wlan0)". Die
+  RSSI-Kachel/-Chart bekommt den RSSI-⇄-Link-Speed-Umschalter aus Abschnitt 4
+  (keine separate Link-Speed-Anzeige).
 
 ## Captive-Portal-Konsequenz (akzeptiert)
 
