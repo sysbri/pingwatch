@@ -255,13 +255,14 @@ class WifiMonitor:
             ssid = None
             if isinstance(ies, dict):
                 ssid = ies.get("SSID")
+            bitrate_mbps = _nl80211_bitrate_mbps(nl, ifidx)
             return WifiSnapshot(
                 ts_ms=ts_ms,
                 ssid=ssid,
                 bssid=bss.get("NL80211_BSS_BSSID"),
                 rssi=_dbm_from_mbm(bss.get("NL80211_BSS_SIGNAL_MBM")),
                 channel=_freq_to_channel(bss.get("NL80211_BSS_FREQUENCY")),
-                link_rate_kbps=None,
+                link_rate_kbps=int(bitrate_mbps * 1000) if bitrate_mbps else None,
                 associated=True,
                 interface=self._cfg.interface,
             )
@@ -361,6 +362,22 @@ def _dbm_from_mbm(mbm: object) -> int | None:
         return None
 
 
+def _nl80211_bitrate_mbps(nl, ifidx) -> float | None:  # pragma: no cover - hw-dependent
+    """Best-effort negotiated TX bitrate (MBit/s) from station info; None if N/A."""
+    try:
+        stations = nl.get_stations(ifidx) or []
+    except Exception:  # noqa: BLE001
+        return None
+    for st in stations:
+        attrs = dict(st.get("attrs", []))
+        sinfo = dict(attrs.get("NL80211_ATTR_STA_INFO", {}).get("attrs", []))
+        rate = dict(sinfo.get("NL80211_STA_INFO_TX_BITRATE", {}).get("attrs", []))
+        bitrate = rate.get("NL80211_RATE_INFO_BITRATE32") or rate.get("NL80211_RATE_INFO_BITRATE")
+        if bitrate:
+            return float(bitrate) / 10.0  # nl80211 reports in 100 kbit/s units
+    return None
+
+
 def _freq_to_channel(freq_mhz: object) -> int | None:
     if freq_mhz is None:
         return None
@@ -380,4 +397,8 @@ def _freq_to_channel(freq_mhz: object) -> int | None:
 
 
 async def run_wifi_monitor(conn, bus) -> None:
-    await WifiMonitor(conn, bus).run()
+    from pingwatch.config import get_settings
+
+    settings = get_settings()
+    cfg = WifiConfig(interface=settings.wifi.interface)
+    await WifiMonitor(conn, bus, cfg).run()
