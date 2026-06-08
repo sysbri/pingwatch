@@ -87,10 +87,12 @@ from .q_traces import (
 )
 from .q_wifi import (
     insert_rssi_sample,
+    insert_source_switch,
     insert_wifi_event,
     latest_rssi,
     list_wifi_events,
     rssi_series,
+    source_switches,
 )
 
 # HTTP-layer compat: imported last so their names shadow the domain versions
@@ -193,10 +195,12 @@ __all__ = [
     "upsert_route_signature",
     # wifi
     "insert_rssi_sample",
+    "insert_source_switch",
     "insert_wifi_event",
     "latest_rssi",
     "list_wifi_events",
     "rssi_series",
+    "source_switches",
     "wifi_current",
     # stream + heartbeat + notifications
     "bytes_today",
