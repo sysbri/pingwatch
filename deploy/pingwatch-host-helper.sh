@@ -13,6 +13,24 @@ log() { logger -t pingwatch-host-helper "$*"; }
 
 WLAN_IF="${PINGWATCH_WLAN_IF:-wlan0}"
 SHARED_DIR="/run/pingwatch-shared"
+PW_SRC="${PINGWATCH_SRC:-/opt/pingwatch/src}"
+
+resolve_wlan_if() {
+  # USB-bevorzugt; Fallback = konfiguriertes wlan0. Reiner stdlib-Aufruf.
+  PYTHONPATH="$PW_SRC" python3 -m pingwatch.netif \
+    --sysfs /sys/class/net --fallback "$WLAN_IF" 2>/dev/null \
+    || echo "$WLAN_IF"
+}
+
+iface_label() {
+  # "usb", wenn das Interface auf dem USB-Bus sitzt, sonst "intern".
+  if [ -e "/sys/class/net/$1/device" ] && \
+     readlink -f "/sys/class/net/$1/device" 2>/dev/null | grep -q "/usb"; then
+    echo "usb"
+  else
+    echo "intern"
+  fi
+}
 
 get_security() {
   # Security of the in-use AP (e.g. WPA2). Best-effort; nmcli only.
@@ -25,13 +43,17 @@ write_wifi_status() {
   # security string comes from a single `iw link` call. Written to a unique
   # temp file and atomically renamed so readers never see a partial JSON.
   local security="${1:-}"
-  local link tmp
-  link=$(iw dev "$WLAN_IF" link 2>/dev/null || true)
+  local wlan_if label link tmp
+  wlan_if=$(resolve_wlan_if)
+  label=$(iface_label "$wlan_if")
+  link=$(iw dev "$wlan_if" link 2>/dev/null || true)
   tmp=$(mktemp "${SHARED_DIR}/.wifi-status.XXXXXX" 2>/dev/null) || return 0
-  python3 - "$link" "$security" > "$tmp" <<'PY'
+  python3 - "$link" "$security" "$wlan_if" "$label" > "$tmp" <<'PY'
 import json, time, sys, re
 link = sys.argv[1] if len(sys.argv) > 1 else ''
 security = sys.argv[2] if len(sys.argv) > 2 else ''
+iface = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+label = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
 connected = 'Connected to' in link
 
 def find(rx, cast=str):
@@ -66,6 +88,8 @@ print(json.dumps({
   'freq': freq,
   'channel': freq_to_chan(freq),
   'security': security or None,
+  'interface': iface,
+  'interface_label': label,
 }))
 PY
   chmod 644 "$tmp" 2>/dev/null || true
@@ -193,6 +217,26 @@ PY
       wifi_forget)
         log "wifi_forget name=$payload"
         nmcli c delete "$payload" 2>&1 | logger -t pingwatch-host-helper || true
+        ;;
+      wifi_prefer_stick)
+        # payload = USB-WLAN-Interface-Name. Verbindet die aktuell genutzte SSID
+        # auf dem Stick, bindet das Profil ans Interface und gibt ihm die
+        # niedrigere Route-Metric, damit der Stick die Default-Route gewinnt.
+        iface="$payload"
+        ssid="$(nmcli -t -f IN-USE,SSID dev wifi 2>/dev/null | awk -F: '$1=="*"{print $2; exit}')"
+        [ -z "$ssid" ] && ssid="${PINGWATCH_EXPECTED_SSID:-}"
+        log "wifi_prefer_stick iface=$iface ssid=${ssid:-<none>}"
+        if [ -n "$iface" ] && [ -n "$ssid" ]; then
+          nmcli dev wifi connect "$ssid" ifname "$iface" 2>&1 | logger -t pingwatch-host-helper || true
+          con="$(nmcli -t -f NAME,DEVICE c show --active 2>/dev/null | awk -F: -v d="$iface" '$2==d{print $1; exit}')"
+          if [ -n "$con" ]; then
+            nmcli c modify "$con" \
+              ipv4.route-metric 50 ipv6.route-metric 50 \
+              connection.autoconnect yes connection.autoconnect-retries 0 \
+              2>&1 | logger -t pingwatch-host-helper || true
+            nmcli c up "$con" ifname "$iface" 2>&1 | logger -t pingwatch-host-helper || true
+          fi
+        fi
         ;;
       *)
         log "ignoring unknown cmd: $cmd"
