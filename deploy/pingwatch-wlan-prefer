@@ -1,0 +1,11 @@
+#!/bin/bash
+# udev-Hook (läuft als root): bittet den Host-Helper, das frisch eingesteckte
+# USB-WLAN-Interface als aktive Verbindung zu bevorzugen. Kurz halten — udev
+# killt langes RUN; systemd-run entkoppelt die FIFO-Schreibung von der
+# udev-Worker-Lebensdauer (Fallback: direkt schreiben).
+IF="$1"
+FIFO="/run/pingwatch-host.fifo"
+[ -n "$IF" ] || exit 0
+[ -p "$FIFO" ] || exit 0
+systemd-run --quiet --no-block /bin/sh -c "printf 'wifi_prefer_stick\t%s\n' '$IF' > '$FIFO'" 2>/dev/null \
+  || printf 'wifi_prefer_stick\t%s\n' "$IF" > "$FIFO"

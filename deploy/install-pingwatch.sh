@@ -128,6 +128,9 @@ install -m 0644 -o pingwatch -g pingwatch \
 install -m 0755 "${DEPLOY_DIR}/pingwatch-usb-mount"   /usr/local/bin/pingwatch-usb-mount
 install -m 0755 "${DEPLOY_DIR}/pingwatch-usb-umount"  /usr/local/bin/pingwatch-usb-umount
 install -m 0644 "${DEPLOY_DIR}/99-pingwatch-usb.rules" /etc/udev/rules.d/99-pingwatch-usb.rules
+# USB-WLAN-Stick auto-prefer (Plug-and-Play-Trigger für wifi_prefer_stick).
+install -m 0644 "${DEPLOY_DIR}/99-pingwatch-wlan.rules" /etc/udev/rules.d/99-pingwatch-wlan.rules
+install -m 0755 "${DEPLOY_DIR}/pingwatch-wlan-prefer"   /usr/local/bin/pingwatch-wlan-prefer
 udevadm control --reload
 mount --make-rshared /
 
