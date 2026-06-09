@@ -12,7 +12,11 @@
 <div class="det-main">
   <div class="chart-panel">
     <div class="chart-head">
-      <div class="pt">RSSI · <span x-text="detail.range"></span></div>
+      <div class="pt" x-text="detail.wifiMetric === 'link' ? 'Link-Speed' : 'RSSI'"></div>
+      <div class="range">
+        <button type="button" :class="{ active: detail.wifiMetric === 'rssi' }" @click.prevent="setWifiMetric('rssi')">RSSI</button>
+        <button type="button" :class="{ active: detail.wifiMetric === 'link' }" @click.prevent="setWifiMetric('link')">Link-Speed</button>
+      </div>
       <div class="range">
         <button type="button" :class="{ active: detail.range === '1h' }" @click.prevent="setRange('1h')">1h</button>
         <button type="button" :class="{ active: detail.range === '24h' }" @click.prevent="setRange('24h')">24h</button>
@@ -23,7 +27,7 @@
       <canvas id="detail-rssi-canvas"></canvas>
     </div>
     <div class="chart-legend">
-      <div class="lg"><span class="ln" style="background:#fbbf24"></span>RSSI (dBm)</div>
+      <div class="lg"><span class="ln" :style="'background:' + (detail.wifiMetric === 'link' ? '#34d399' : '#fbbf24')"></span><span x-text="detail.wifiMetric === 'link' ? 'Link-Speed (MBit/s)' : 'RSSI (dBm)'"></span></div>
     </div>
   </div>
 
@@ -55,6 +59,7 @@
           <div><span class="t">Freq</span><span x-text="(detail.wifi_overview.current.freq_mhz != null ? detail.wifi_overview.current.freq_mhz + ' MHz' : '—')"></span></div>
           <div><span class="t">Security</span><span x-text="detail.wifi_overview.current.security || '—'"></span></div>
           <div><span class="t">Status</span><span :class="detail.wifi_overview.current.connected ? 'ok' : 'fail'" x-text="detail.wifi_overview.current.connected ? 'verbunden' : 'getrennt'"></span></div>
+          <div><span class="t">Quelle</span><span x-text="(detail.wifi_overview.current.interface_label === 'usb' ? 'Stick' : 'Intern') + ' · ' + (detail.wifi_overview.current.interface || '—')"></span></div>
         </div>
       </template>
     </div>

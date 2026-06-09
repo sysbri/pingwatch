@@ -55,6 +55,7 @@ function pingwatch() {
       pingStatuses: [],
       pingSearch: '',
       wifi_overview: null,
+      wifiMetric: 'rssi',
     },
     settings: {},
     targets: [],
@@ -181,6 +182,11 @@ function pingwatch() {
       this.detail.range = r;
       if (this.detail.key === 'wifi') { this.loadWifiOverview(); return; }
       this.loadOverview();
+    },
+
+    setWifiMetric(m) {
+      this.detail.wifiMetric = m;
+      this.$nextTick(() => this._renderRssiChart());
     },
 
     // ---------- dashboard ----------
@@ -339,7 +345,13 @@ function pingwatch() {
       this._rssiChart = null;
       const init = () => {
         const fn = (window.PingWatchCharts.rssiChart || window.PingWatchCharts.latencyChart);
-        this._rssiChart = fn(cv, this.detail.wifi_overview.series || []);
+        const ov = this.detail.wifi_overview;
+        if (this.detail.wifiMetric === 'link') {
+          const pts = (ov.link_series || []).map((p) => ({ ts_ms: p.ts_ms, rssi: Math.round(p.link_rate_kbps / 100) / 10 }));
+          this._rssiChart = fn(cv, pts, { label: 'Link-Speed', color: '#34d399', bg: 'rgba(52,211,153,0.10)', unit: 'MBit/s', yMin: 0, yMax: null });
+        } else {
+          this._rssiChart = fn(cv, ov.series || []);
+        }
       };
       if (cv.clientWidth === 0 || cv.clientHeight === 0) {
         requestAnimationFrame(() => requestAnimationFrame(init));

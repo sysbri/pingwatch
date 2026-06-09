@@ -178,9 +178,13 @@
     });
   }
 
-  function rssiChart(canvas, dataPoints) {
+  function rssiChart(canvas, dataPoints, opts) {
     const C = _maybeChart();
     if (!C || !canvas) return null;
+    const o = Object.assign(
+      { label: 'RSSI', color: '#fbbf24', bg: 'rgba(251,191,36,0.10)', unit: 'dBm', yMin: -100, yMax: -30 },
+      opts || {}
+    );
     const fmtTime = (ts) => {
       if (!ts) return '';
       const d = new Date(ts);
@@ -194,15 +198,15 @@
         labels: pts.map((p) => p.ts_ms || p.ts || p.x || ''),
         datasets: [
           {
-            label: 'RSSI',
+            label: o.label,
             data: pts.map((p) => (p.rssi != null ? p.rssi : null)),
-            borderColor: '#fbbf24',
-            backgroundColor: 'rgba(251,191,36,0.10)',
+            borderColor: o.color,
+            backgroundColor: o.bg,
             borderWidth: 1.5,
             tension: 0.2,
             pointRadius: 0,
             pointHoverRadius: 5,
-            pointHoverBackgroundColor: '#fbbf24',
+            pointHoverBackgroundColor: o.color,
             pointHoverBorderColor: '#ffffff',
             pointHoverBorderWidth: 2,
             fill: true,
@@ -238,7 +242,7 @@
               label: (item) => {
                 const v = item.parsed.y;
                 if (v == null) return 'kein Sample';
-                return 'RSSI: ' + v + ' dBm';
+                return o.label + ': ' + v + ' ' + o.unit;
               },
             },
           },
@@ -246,8 +250,9 @@
         scales: {
           x: { display: false },
           y: {
-            min: -100, max: -30,
-            ticks: { color: '#6b7280', font: { size: 10 }, callback: (v) => v + ' dBm' },
+            ...(o.yMin != null ? { min: o.yMin } : {}),
+            ...(o.yMax != null ? { max: o.yMax } : {}),
+            ticks: { color: '#6b7280', font: { size: 10 }, callback: (v) => v + ' ' + o.unit },
             grid: { color: '#1f2937' },
           },
         },
