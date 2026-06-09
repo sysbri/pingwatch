@@ -137,9 +137,32 @@ while true; do
         /bin/systemctl reboot
         ;;
       update_check)
-        log "update_check"
-        (cd /opt/pingwatch && git pull --ff-only && /usr/bin/docker compose -f /opt/pingwatch/docker/docker-compose.yml build) || true
-        /bin/systemctl restart pingwatch.service || true
+        # Vollständiges Update: origin/main ziehen, dann den (idempotenten)
+        # Installer neu laufen lassen — der deckt Host-Helper + udev + Image-
+        # Build + Units ab (git pull allein installiert die Host-Seite NICHT).
+        # </dev/null: der Installer fragt am Ende nach Reboot — ohne TTY = nein.
+        log "update_check: pull + reinstall + restart"
+        ( cd /opt/pingwatch \
+            && git pull --ff-only \
+            && bash deploy/install-pingwatch.sh </dev/null ) >/dev/null 2>&1 || true
+        # Dienste neu starten. Den Host-Helper-Neustart entkoppeln (systemd-run),
+        # sonst killt sich dieser Prozess mitten im Befehl selbst.
+        systemd-run --no-block --quiet /bin/sh -c \
+          'systemctl restart pingwatch.service; systemctl restart pingwatch-host-helper.service' \
+          2>/dev/null || /bin/systemctl restart pingwatch.service || true
+        ;;
+      check_update)
+        # Remote prüfen und update-status.json schreiben (von der UI gelesen).
+        log "check_update"
+        ( cd /opt/pingwatch \
+            && git fetch --quiet origin 2>/dev/null \
+            && cur=$(git rev-parse --short HEAD 2>/dev/null) \
+            && rem=$(git rev-parse --short origin/main 2>/dev/null) \
+            && behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0) \
+            && branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) \
+            && python3 -c "import json,time,sys; print(json.dumps({'ts_ms':int(time.time()*1000),'current_sha':sys.argv[1] or None,'remote_sha':sys.argv[2] or None,'behind':int(sys.argv[3] or 0),'branch':sys.argv[4] or None}))" \
+                 "$cur" "$rem" "$behind" "$branch" > "${SHARED_DIR}/update-status.json" \
+            && chmod 644 "${SHARED_DIR}/update-status.json" ) || true
         ;;
       restart_app)
         log "restart_app"
