@@ -69,6 +69,7 @@ function pingwatch() {
     exportBusy: null,
     usbAvailable: null,
     toast: null,
+    armed: null,  // Zwei-Klick-Bestätigung (confirm() ist im Kiosk unterdrückt)
     speedtest: { status: 'idle', last: null, error: null, elapsed: 0, history: [], _poll: null, _t0: 0 },
     wifi: {
       status: null,           // { connected, ssid, signal_pct, rssi_dbm, bitrate_mbps, freq }
@@ -515,8 +516,12 @@ function pingwatch() {
 
     async deleteTarget(id) {
       // Confirm is handled inline at the call-site for the new card UI; keep
-      // the defensive prompt for any other invocation path.
-      if (arguments.length < 2 && !confirm('Ziel löschen?')) return;
+      // a defensive two-click arm for any other invocation path (confirm()
+      // dialogs are suppressed in kiosk Chromium).
+      if (arguments.length < 2 && !this.arm('deltarget-' + id)) {
+        this.showToast('Nochmal klicken zum Löschen');
+        return;
+      }
       await fetch('/api/targets/' + id, { method: 'DELETE' });
       await this.loadTargets();
     },
@@ -571,7 +576,7 @@ function pingwatch() {
       this.update.checking = false;
     },
     async installUpdate() {
-      if (!confirm('Update installieren? Der Pi lädt, baut und startet neu (~1–3 Min).')) return;
+      if (!this.arm('install')) return;
       let started = false;
       try {
         const r = await fetch('/api/system/update', { method: 'POST' });
@@ -609,18 +614,35 @@ function pingwatch() {
     },
 
     async downloadDiagnose() { window.location = '/api/system/diagnose-bundle'; },
+
+    // Kiosk-taugliche Bestätigung: confirm()-Dialoge werden im Chromium-
+    // Kiosk-Modus unterdrückt (liefern sofort false) — destruktive Aktionen
+    // brauchen daher eine Zwei-Klick-Armierung statt eines Dialogs.
+    arm(key) {
+      if (this.armed === key) { this.armed = null; return true; }
+      this.armed = key;
+      setTimeout(() => { if (this.armed === key) this.armed = null; }, 6000);
+      return false;
+    },
+
     async clearData() {
-      if (!confirm('Alle Metriken löschen?')) return;
-      await fetch('/api/system/clear-data', { method: 'POST' });
-      this.showToast('Daten gelöscht');
+      if (!this.arm('clear')) return;
+      try {
+        const r = await fetch('/api/system/clear-data', { method: 'POST' });
+        this.showToast(r.ok ? 'Daten gelöscht' : 'Löschen fehlgeschlagen');
+      } catch (e) { this.showToast('Löschen fehlgeschlagen'); }
+      this.fetchDashboard();
+      this.loadSystem();
     },
     async restartSystem() {
-      if (!confirm('System neu starten?')) return;
+      if (!this.arm('restart')) return;
       await fetch('/api/system/restart', { method: 'POST' });
+      this.showToast('Neustart angefordert');
     },
     async factoryReset() {
-      if (!confirm('Werksreset — alle Daten verloren. Fortfahren?')) return;
+      if (!this.arm('factory')) return;
       await fetch('/api/system/factory-reset?confirm=yes', { method: 'POST' });
+      this.showToast('Werksreset angefordert');
     },
 
     // ---------- export ----------
