@@ -61,7 +61,7 @@ function pingwatch() {
     targets: [],
     newTarget: { name: '', address: '', type: 'ICMP', kind: 'external', interval_ms: 1000, timeout_ms: 2000, enabled: true, ordering: 0 },
     system: {},
-    update: { current_sha: null, remote_sha: null, behind: null, branch: null, ts_ms: null, checking: false },
+    update: { current_sha: null, remote_sha: null, behind: null, branch: null, ts_ms: null, checking: false, installing: false, phase: null },
     exportRange: '24h',
     streamRange: '1h',
     streamSeries: [],
@@ -571,9 +571,41 @@ function pingwatch() {
       this.update.checking = false;
     },
     async installUpdate() {
-      if (!confirm('Update installieren? Der Pi baut & startet die Dienste neu (~1–2 Min).')) return;
-      await fetch('/api/system/update', { method: 'POST' });
-      this.showToast('Update läuft — Pi baut & startet neu, Seite verbindet automatisch.');
+      if (!confirm('Update installieren? Der Pi lädt, baut und startet neu (~1–3 Min).')) return;
+      let started = false;
+      try {
+        const r = await fetch('/api/system/update', { method: 'POST' });
+        const d = r.ok ? await r.json() : null;
+        started = !!(d && d.ok);
+      } catch (e) { /* */ }
+      if (!started) { this.showToast('Update-Start fehlgeschlagen (Host-Helper nicht erreichbar)'); return; }
+      this.update.installing = true;
+      this.update.phase = 'gestartet';
+      this.showToast('Update gestartet…');
+      // Poll the detached runner's progress. The app restarts mid-update,
+      // so fetch errors are expected — keep polling through them.
+      for (let i = 0; i < 100; i++) {
+        await new Promise((res) => setTimeout(res, 3000));
+        try {
+          const pr = await fetch('/api/system/update-result');
+          if (!pr.ok) continue;
+          const p = await pr.json();
+          if (p.phase) this.update.phase = p.detail ? (p.phase + ' — ' + p.detail) : p.phase;
+          if (p.phase === 'done') {
+            this.update.installing = false;
+            this.showToast('Update abgeschlossen');
+            await this.checkUpdate();
+            return;
+          }
+          if (p.phase === 'failed') {
+            this.update.installing = false;
+            this.showToast('Update fehlgeschlagen: ' + (p.detail || 'siehe Log'));
+            return;
+          }
+        } catch (e) { /* app restarting */ }
+      }
+      this.update.installing = false;
+      this.showToast('Update-Status unklar — bitte "Nach Updates suchen" klicken');
     },
 
     async downloadDiagnose() { window.location = '/api/system/diagnose-bundle'; },

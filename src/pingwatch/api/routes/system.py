@@ -26,6 +26,8 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 # Written by the host-helper `check_update` command (git fetch + behind-count).
 _SHARED_DIR = Path("/run/pingwatch-shared")
 _UPDATE_STATUS_FILE = _SHARED_DIR / "update-status.json"
+# Written by the detached update runner (deploy/pingwatch-update).
+_UPDATE_RESULT_FILE = _SHARED_DIR / "update-result.json"
 
 
 def _read_cpu_pct() -> float:
@@ -212,10 +214,27 @@ async def get_update_status() -> dict[str, Any]:
 
 @router.post("/update", response_model=OkResponse)
 async def install_update() -> OkResponse:
-    # Host-helper pulls origin/main, re-runs the installer (host-helper + udev
-    # + image build) and restarts the services.
+    # Host-helper starts the detached update runner (pull + installer +
+    # restarts); progress lands in update-result.json (see /update-result).
     ok = await _write_host_command("update_check")
     return OkResponse(ok=ok, detail="update started" if ok else "fifo unavailable")
+
+
+@router.get("/update-result")
+async def get_update_result() -> dict[str, Any]:
+    """Progress of the running/last update (written by the update runner).
+
+    ``phase`` is one of pull/install/restart/done/failed; ``None`` when no
+    update ran since boot.
+    """
+    try:
+        if _UPDATE_RESULT_FILE.exists():
+            data = json.loads(_UPDATE_RESULT_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, ValueError):
+        pass
+    return {"phase": None, "detail": None, "ts_ms": None}
 
 
 @router.get("/info")

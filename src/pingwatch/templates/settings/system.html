@@ -19,8 +19,11 @@
     <div class="ds">
       <span>Stand: </span><span x-text="update.current_sha || (system.version || '—')"></span><span x-show="update.branch && update.branch !== 'main'" x-text="' (' + update.branch + ')'"></span><span x-show="update.behind > 0" style="color:#fbbf24" x-text="' · Update verfügbar (' + update.behind + ')'"></span><span x-show="update.behind === 0" style="color:#34d399"> · aktuell</span>
     </div>
-    <button class="btn" @click="checkUpdate()" x-text="update.checking ? 'Prüfe…' : 'Nach Updates suchen'"></button>
-    <button class="btn" @click="installUpdate()" :disabled="!(update.behind > 0)">Update installieren</button>
+    <button class="btn" @click="checkUpdate()" :disabled="update.installing" x-text="update.checking ? 'Prüfe…' : 'Nach Updates suchen'"></button>
+    <button class="btn" @click="installUpdate()" :disabled="!(update.behind > 0) || update.installing">Update installieren</button>
+    <div class="ds" x-show="update.installing" x-cloak style="margin-top:6px;color:#fbbf24">
+      <span x-text="'Läuft: ' + (update.phase || '…')"></span>
+    </div>
   </div>
   <div class="exp-card">
     <div class="ti">Diagnose-Bundle</div>

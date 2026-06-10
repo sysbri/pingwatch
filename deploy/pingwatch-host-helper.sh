@@ -144,19 +144,18 @@ while true; do
         /bin/systemctl reboot
         ;;
       update_check)
-        # Vollständiges Update: origin/main ziehen, dann den (idempotenten)
-        # Installer neu laufen lassen — der deckt Host-Helper + udev + Image-
-        # Build + Units ab (git pull allein installiert die Host-Seite NICHT).
-        # </dev/null: der Installer fragt am Ende nach Reboot — ohne TTY = nein.
-        log "update_check: pull + reinstall + restart"
-        ( cd /opt/pingwatch \
-            && git pull --ff-only \
-            && bash deploy/install-pingwatch.sh </dev/null ) >/dev/null 2>&1 || true
-        # Dienste neu starten. Den Host-Helper-Neustart entkoppeln (systemd-run),
-        # sonst killt sich dieser Prozess mitten im Befehl selbst.
-        systemd-run --no-block --quiet /bin/sh -c \
-          'systemctl restart pingwatch.service; systemctl restart pingwatch-host-helper.service' \
-          2>/dev/null || /bin/systemctl restart pingwatch.service || true
+        # Vollständiges Update (pull + idempotenter Installer + Restarts) im
+        # ENTKOPPELTEN Runner (eigene transiente Unit): ueberlebt den
+        # Helper-Neustart, blockiert den FIFO-Dispatch nicht und schreibt
+        # Fortschritt nach update-result.json + /tmp/pingwatch-update.log.
+        runner="/usr/local/bin/pingwatch-update"
+        # Direkt nach einem git pull (vor dem ersten Installer-Lauf) liegt
+        # der Runner evtl. nur im Repo.
+        [ -x "$runner" ] || runner="/opt/pingwatch/deploy/pingwatch-update"
+        log "update_check: starte detached runner $runner"
+        rm -f "${SHARED_DIR}/update-result.json" 2>/dev/null || true
+        systemd-run --quiet --collect --unit pingwatch-update "$runner" 2>&1 \
+          | logger -t pingwatch-host-helper || true
         ;;
       check_update)
         # Remote prüfen und update-status.json schreiben (von der UI gelesen).
