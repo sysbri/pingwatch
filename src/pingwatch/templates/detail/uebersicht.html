@@ -13,7 +13,7 @@
 <div class="det-main">
   <div class="chart-panel">
     <div class="chart-head">
-      <div class="pt">Latenz · 24 h</div>
+      <div class="pt">Latenz · <span x-text="detail.range"></span></div>
       <div class="range">
         <button type="button" :class="{ active: detail.range === '1h' }" @click.prevent="setRange('1h')">1h</button>
         <button type="button" :class="{ active: detail.range === '24h' }" @click.prevent="setRange('24h')">24h</button>

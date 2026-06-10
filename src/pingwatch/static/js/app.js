@@ -687,6 +687,14 @@ function pingwatch() {
         if (r.ok) this.wifi.status = await r.json();
       } catch (e) { /* */ }
     },
+    async openPortal() {
+      try {
+        const r = await fetch('/api/wifi/open-portal', { method: 'POST' });
+        const d = r.ok ? await r.json() : null;
+        if (d && d.ok) this.showToast('Portal-Seite öffnet auf dem Bildschirm — schließt nach 3 Min automatisch');
+        else this.showToast('Portal öffnen fehlgeschlagen (Host-Helper nicht erreichbar)');
+      } catch (e) { this.showToast('Portal öffnen fehlgeschlagen'); }
+    },
     async scanNetworks() {
       if (this.wifi.scanning) return;
       this.wifi.scanning = true;

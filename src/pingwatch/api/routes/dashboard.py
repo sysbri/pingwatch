@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
+from pingwatch import connectivity
 from pingwatch.api.deps import RANGE_TO_MS, ConnDep
 from pingwatch.db import queries as q
 
@@ -210,6 +211,8 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     if wifi_card_data["events_today"]:
         wifi_card_data["status"] = "flaky"
 
+    _conn_state = connectivity.get_state()
+
     return {
         "ts_ms": now_ms,
         "hero": hero,
@@ -226,6 +229,10 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
             "wifi_rssi": wifi_rssi,
             "internet_ok": internet_ok,
             "internet_loss_pct": internet_loss,
+            # HTTP-204 probe — ICMP slips through captive portals, this does not.
+            "internet_status": _conn_state.status,
+            "captive_portal": _conn_state.status == "portal",
+            "portal_url": _conn_state.portal_url,
         },
     }
 

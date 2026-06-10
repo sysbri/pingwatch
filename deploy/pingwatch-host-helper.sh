@@ -248,6 +248,31 @@ PY
         log "wifi_forget name=$payload"
         nmcli c delete "$payload" 2>&1 | logger -t pingwatch-host-helper || true
         ;;
+      open_portal)
+        # payload = URL (erkannte Portal-Redirect-URL bzw. HTTP-Fallback).
+        # Oeffnet ein temporaeres Chromium-Fenster im laufenden cage-Kiosk
+        # (neues Toplevel liegt automatisch im Vordergrund). Schliesst sich
+        # nach 3 Minuten selbst; vorher per Strg+W moeglich.
+        url="$payload"
+        case "$url" in
+          http://*|https://*) : ;;
+          *) log "open_portal: refusing non-http url"; url="" ;;
+        esac
+        if [ -n "$url" ]; then
+          pw_uid=$(id -u pingwatch 2>/dev/null)
+          wld=$(ls "/run/user/${pw_uid}/" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -1)
+          wld="${wld:-wayland-0}"
+          log "open_portal url=$url display=$wld"
+          # Nur eine Portal-Instanz zulassen (Pattern matcht NUR das
+          # portal-eigene user-data-dir, nicht den Kiosk-Chromium).
+          pkill -u pingwatch -f "pingwatch-portal-chromium" 2>/dev/null || true
+          sudo -u pingwatch env XDG_RUNTIME_DIR="/run/user/${pw_uid}" WAYLAND_DISPLAY="$wld" \
+            chromium --ozone-platform=wayland \
+            --user-data-dir="/home/pingwatch/.cache/pingwatch-portal-chromium" \
+            --app="$url" >/dev/null 2>&1 &
+          ( sleep 180; pkill -u pingwatch -f "pingwatch-portal-chromium" 2>/dev/null ) &
+        fi
+        ;;
       wifi_prefer_stick)
         # payload = USB-WLAN-Interface-Name. Verbindet die aktuell genutzte SSID
         # auf dem Stick, bindet das Profil ans Interface und gibt ihm die

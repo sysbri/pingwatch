@@ -11,11 +11,16 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from pingwatch import connectivity
 from pingwatch.api import host_fifo
 from pingwatch.api.deps import RANGE_TO_MS, ConnDep
+from pingwatch.api.schemas import OkResponse
 from pingwatch.db import queries
 
 router = APIRouter(prefix="/api/wifi", tags=["wifi"])
+
+# Plain-HTTP page the portal can hijack when we never saw a redirect URL.
+_PORTAL_FALLBACK_URL = "http://neverssl.com"
 
 _RESULT_DIR = Path("/run/pingwatch-shared")
 _SCAN_FILE = _RESULT_DIR / "wifi-scan.json"
@@ -139,6 +144,17 @@ async def get_status() -> dict[str, Any]:
     if data is None:
         raise HTTPException(status_code=503, detail="status unavailable")
     return data
+
+
+@router.post("/open-portal", response_model=OkResponse)
+async def open_portal() -> OkResponse:
+    """Open the captive portal in a temporary browser window on the kiosk."""
+    url = connectivity.get_state().portal_url or _PORTAL_FALLBACK_URL
+    try:
+        await host_fifo.write_command(f"open_portal\t{url}")
+    except (FileNotFoundError, PermissionError, TimeoutError, OSError):
+        return OkResponse(ok=False, detail="host helper unavailable")
+    return OkResponse(ok=True, detail="portal opening on kiosk")
 
 
 @router.post("/forget")

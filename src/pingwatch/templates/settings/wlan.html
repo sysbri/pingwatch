@@ -26,6 +26,13 @@
   </template>
 </div>
 
+<!-- Captive Portal -->
+<div class="exp-card" style="margin-top:10px">
+  <div class="ti">Captive Portal</div>
+  <div class="ds">Freies WLAN mit Anmeldeseite? Oeffnet die Portal-Seite direkt auf diesem Bildschirm &mdash; mit der Maus durchklicken, das Fenster schliesst nach 3 Minuten von selbst (oder Strg+W).</div>
+  <button class="btn" @click="openPortal()">Portal-Seite oeffnen</button>
+</div>
+
 <!-- Error-Banner -->
 <div class="wifi-error" x-show="wifi.lastError" x-cloak>
   <strong>Fehler:</strong> <span x-text="wifi.lastError"></span>
