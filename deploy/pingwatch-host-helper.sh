@@ -49,7 +49,9 @@ write_wifi_status() {
   link=$(iw dev "$wlan_if" link 2>/dev/null || true)
   # Default-Route-Gateway (niedrigste Metric zuerst) — der Container haelt
   # damit das Gateway-Ziel aktuell (gateway_sync).
-  gw=$(ip route show default 2>/dev/null | awk '/^default/ {print $3; exit}')
+  # Nur `via`-Routen liefern eine Gateway-IP; `default dev ppp0` o.ae. wuerde
+  # sonst den Devicenamen extrahieren.
+  gw=$(ip route show default 2>/dev/null | awk '$1=="default" && $2=="via" {print $3; exit}')
   tmp=$(mktemp "${SHARED_DIR}/.wifi-status.XXXXXX" 2>/dev/null) || return 0
   python3 - "$link" "$security" "$wlan_if" "$label" "$gw" > "$tmp" <<'PY'
 import json, time, sys, re

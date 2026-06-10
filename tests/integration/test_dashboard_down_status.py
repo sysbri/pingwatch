@@ -31,8 +31,10 @@ def _card(payload: dict, dest_id: int) -> dict:
 @pytest.mark.asyncio
 async def test_recent_total_loss_is_down_despite_good_day(db: aiosqlite.Connection) -> None:
     now_ms = int(time.time() * 1000)
-    # 23h of perfect pings -> 24h aggregate loss stays low...
-    await _seed_pings(db, 1, ts_from_ms=now_ms - 4 * 3_600_000, count=600,
+    # Enough perfect pings that the 24h aggregate loss stays under the 1%
+    # flaky threshold (20/3020 = 0.66%) — without the down-rule this card
+    # would show the stale "ok" from the original bug report...
+    await _seed_pings(db, 1, ts_from_ms=now_ms - 4 * 3_600_000, count=3000,
                       interval_ms=1000, success=True)
     # ...but the last 60s are 100% lost (network changed, gateway gone).
     await _seed_pings(db, 1, ts_from_ms=now_ms - 60_000, count=20,

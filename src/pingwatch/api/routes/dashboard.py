@@ -28,7 +28,13 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     cards: list[dict[str, Any]] = []
     for dest in destinations:
         kpi = await q.dest_kpis(conn, dest["id"], since_ms=day_start_ms)
-        recent = await q.dest_kpis(conn, dest["id"], since_ms=now_ms - _RECENT_WINDOW_MS)
+        # Scale the recency window for slow-interval targets so they can still
+        # accumulate enough attempts to be classified down.
+        recent_window_ms = max(
+            _RECENT_WINDOW_MS,
+            (dest.get("interval_ms") or 1000) * _RECENT_MIN_ATTEMPTS * 2,
+        )
+        recent = await q.dest_kpis(conn, dest["id"], since_ms=now_ms - recent_window_ms)
         spark = await q.latency_sparkline(conn, dest["id"], points=60)
         outs = await q.outages_today_for_dest(
             conn, dest["id"], since_ms=day_start_ms
