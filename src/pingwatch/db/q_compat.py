@@ -654,6 +654,8 @@ async def purge_all_metrics(conn: aiosqlite.Connection) -> None:
         "stream_throughput_samples",
         "heartbeat_events",
         "notifications",
+        "wifi_source_switches",
+        "speedtests",
     ):
         await conn.execute(f"DELETE FROM {tbl}")  # noqa: S608
     await conn.commit()

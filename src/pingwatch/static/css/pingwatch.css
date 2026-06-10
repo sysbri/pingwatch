@@ -453,6 +453,8 @@
   .exp-card .btn { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); color: #60a5fa; padding: 8px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; align-self: flex-start; margin-top: 6px; }
   .exp-card .btn:hover { background: rgba(59,130,246,0.25); }
   .exp-card.danger .btn { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.35); color: #f87171; }
+  /* Zwei-Klick-Armierung (Kiosk unterdrueckt confirm()-Dialoge). */
+  .exp-card .btn.armed { background: rgba(239,68,68,0.25); border-color: #ef4444; color: #fecaca; font-weight: 600; }
   .exp-range { background: #0d1320; border: 1px solid #1f2937; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; }
   .exp-range .ti { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
   .exp-range .seg { display: inline-flex; }
