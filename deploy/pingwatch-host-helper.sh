@@ -13,6 +13,24 @@ log() { logger -t pingwatch-host-helper "$*"; }
 
 WLAN_IF="${PINGWATCH_WLAN_IF:-wlan0}"
 SHARED_DIR="/run/pingwatch-shared"
+PW_SRC="${PINGWATCH_SRC:-/opt/pingwatch/src}"
+
+resolve_wlan_if() {
+  # USB-bevorzugt; Fallback = konfiguriertes wlan0. Reiner stdlib-Aufruf.
+  PYTHONPATH="$PW_SRC" python3 -m pingwatch.netif \
+    --sysfs /sys/class/net --fallback "$WLAN_IF" 2>/dev/null \
+    || echo "$WLAN_IF"
+}
+
+iface_label() {
+  # "usb", wenn das Interface auf dem USB-Bus sitzt, sonst "intern".
+  if [ -e "/sys/class/net/$1/device" ] && \
+     readlink -f "/sys/class/net/$1/device" 2>/dev/null | grep -q "/usb"; then
+    echo "usb"
+  else
+    echo "intern"
+  fi
+}
 
 get_security() {
   # Security of the in-use AP (e.g. WPA2). Best-effort; nmcli only.
@@ -25,13 +43,23 @@ write_wifi_status() {
   # security string comes from a single `iw link` call. Written to a unique
   # temp file and atomically renamed so readers never see a partial JSON.
   local security="${1:-}"
-  local link tmp
-  link=$(iw dev "$WLAN_IF" link 2>/dev/null || true)
+  local wlan_if label link gw tmp
+  wlan_if=$(resolve_wlan_if)
+  label=$(iface_label "$wlan_if")
+  link=$(iw dev "$wlan_if" link 2>/dev/null || true)
+  # Default-Route-Gateway (niedrigste Metric zuerst) — der Container haelt
+  # damit das Gateway-Ziel aktuell (gateway_sync).
+  # Nur `via`-Routen liefern eine Gateway-IP; `default dev ppp0` o.ae. wuerde
+  # sonst den Devicenamen extrahieren.
+  gw=$(ip route show default 2>/dev/null | awk '$1=="default" && $2=="via" {print $3; exit}')
   tmp=$(mktemp "${SHARED_DIR}/.wifi-status.XXXXXX" 2>/dev/null) || return 0
-  python3 - "$link" "$security" > "$tmp" <<'PY'
+  python3 - "$link" "$security" "$wlan_if" "$label" "$gw" > "$tmp" <<'PY'
 import json, time, sys, re
 link = sys.argv[1] if len(sys.argv) > 1 else ''
 security = sys.argv[2] if len(sys.argv) > 2 else ''
+iface = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+label = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+gateway = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
 connected = 'Connected to' in link
 
 def find(rx, cast=str):
@@ -66,6 +94,9 @@ print(json.dumps({
   'freq': freq,
   'channel': freq_to_chan(freq),
   'security': security or None,
+  'interface': iface,
+  'interface_label': label,
+  'gateway_ip': gateway,
 }))
 PY
   chmod 644 "$tmp" 2>/dev/null || true
@@ -113,9 +144,32 @@ while true; do
         /bin/systemctl reboot
         ;;
       update_check)
-        log "update_check"
-        (cd /opt/pingwatch && git pull --ff-only && /usr/bin/docker compose -f /opt/pingwatch/docker/docker-compose.yml build) || true
-        /bin/systemctl restart pingwatch.service || true
+        # Vollständiges Update: origin/main ziehen, dann den (idempotenten)
+        # Installer neu laufen lassen — der deckt Host-Helper + udev + Image-
+        # Build + Units ab (git pull allein installiert die Host-Seite NICHT).
+        # </dev/null: der Installer fragt am Ende nach Reboot — ohne TTY = nein.
+        log "update_check: pull + reinstall + restart"
+        ( cd /opt/pingwatch \
+            && git pull --ff-only \
+            && bash deploy/install-pingwatch.sh </dev/null ) >/dev/null 2>&1 || true
+        # Dienste neu starten. Den Host-Helper-Neustart entkoppeln (systemd-run),
+        # sonst killt sich dieser Prozess mitten im Befehl selbst.
+        systemd-run --no-block --quiet /bin/sh -c \
+          'systemctl restart pingwatch.service; systemctl restart pingwatch-host-helper.service' \
+          2>/dev/null || /bin/systemctl restart pingwatch.service || true
+        ;;
+      check_update)
+        # Remote prüfen und update-status.json schreiben (von der UI gelesen).
+        log "check_update"
+        ( cd /opt/pingwatch \
+            && git fetch --quiet origin 2>/dev/null \
+            && cur=$(git rev-parse --short HEAD 2>/dev/null) \
+            && rem=$(git rev-parse --short origin/main 2>/dev/null) \
+            && behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0) \
+            && branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) \
+            && python3 -c "import json,time,sys; print(json.dumps({'ts_ms':int(time.time()*1000),'current_sha':sys.argv[1] or None,'remote_sha':sys.argv[2] or None,'behind':int(sys.argv[3] or 0),'branch':sys.argv[4] or None}))" \
+                 "$cur" "$rem" "$behind" "$branch" > "${SHARED_DIR}/update-status.json" \
+            && chmod 644 "${SHARED_DIR}/update-status.json" ) || true
         ;;
       restart_app)
         log "restart_app"
@@ -193,6 +247,26 @@ PY
       wifi_forget)
         log "wifi_forget name=$payload"
         nmcli c delete "$payload" 2>&1 | logger -t pingwatch-host-helper || true
+        ;;
+      wifi_prefer_stick)
+        # payload = USB-WLAN-Interface-Name. Verbindet die aktuell genutzte SSID
+        # auf dem Stick, bindet das Profil ans Interface und gibt ihm die
+        # niedrigere Route-Metric, damit der Stick die Default-Route gewinnt.
+        iface="$payload"
+        ssid="$(nmcli -t -f IN-USE,SSID dev wifi 2>/dev/null | awk -F: '$1=="*"{print $2; exit}')"
+        [ -z "$ssid" ] && ssid="${PINGWATCH_EXPECTED_SSID:-}"
+        log "wifi_prefer_stick iface=$iface ssid=${ssid:-<none>}"
+        if [ -n "$iface" ] && [ -n "$ssid" ]; then
+          nmcli dev wifi connect "$ssid" ifname "$iface" 2>&1 | logger -t pingwatch-host-helper || true
+          con="$(nmcli -t -f NAME,DEVICE c show --active 2>/dev/null | awk -F: -v d="$iface" '$2==d{print $1; exit}')"
+          if [ -n "$con" ]; then
+            nmcli c modify "$con" \
+              ipv4.route-metric 50 ipv6.route-metric 50 \
+              connection.autoconnect yes connection.autoconnect-retries 0 \
+              2>&1 | logger -t pingwatch-host-helper || true
+            nmcli c up "$con" ifname "$iface" 2>&1 | logger -t pingwatch-host-helper || true
+          fi
+        fi
         ;;
       *)
         log "ignoring unknown cmd: $cmd"

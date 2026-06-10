@@ -79,6 +79,7 @@ class WifiMonitor:
         self._stop = asyncio.Event()
         self._prev_snapshot: WifiSnapshot | None = None
         self._pending_disconnect_ts: int | None = None
+        self._prev_interface: str | None = None
         self._status_path = Path(self._cfg.status_file)
 
     async def run(self) -> None:
@@ -117,6 +118,13 @@ class WifiMonitor:
             await queries.insert_wifi_event(self._conn, ev)
             await self._bus.publish("wifi.events", ev)
         self._prev_snapshot = snap
+        if snap.interface and snap.interface != self._prev_interface:
+            if self._prev_interface is not None:
+                await queries.insert_source_switch(
+                    self._conn, snap.ts_ms, self._prev_interface, snap.interface
+                )
+                await self._bus.publish("wifi.source_switch", snap)
+            self._prev_interface = snap.interface
 
     async def _coalesce_reassoc(
         self, events: list[WifiEvent], snap: WifiSnapshot
@@ -189,15 +197,11 @@ class WifiMonitor:
             return None
         file_ts = data.get("ts_ms")
         ts = int(file_ts) if isinstance(file_ts, (int, float)) else ts_ms
+        iface = data.get("interface")
         if not data.get("connected"):
             return WifiSnapshot(
-                ts_ms=ts,
-                ssid=None,
-                bssid=None,
-                rssi=None,
-                channel=None,
-                link_rate_kbps=None,
-                associated=False,
+                ts_ms=ts, ssid=None, bssid=None, rssi=None, channel=None,
+                link_rate_kbps=None, associated=False, interface=iface,
             )
         rssi = data.get("rssi_dbm")
         if rssi is None:
@@ -211,6 +215,7 @@ class WifiMonitor:
             channel=data.get("channel"),
             link_rate_kbps=int(float(bitrate) * 1000) if bitrate is not None else None,
             associated=True,
+            interface=iface,
         )
 
     def _sample_nl80211(self, ts_ms: int) -> WifiSnapshot:  # pragma: no cover - hw-dependent
@@ -229,6 +234,7 @@ class WifiMonitor:
                     channel=None,
                     link_rate_kbps=None,
                     associated=False,
+                    interface=self._cfg.interface,
                 )
             scan = nl.get_associated_bss(ifidx) or []
             if not scan:
@@ -240,6 +246,7 @@ class WifiMonitor:
                     channel=None,
                     link_rate_kbps=None,
                     associated=False,
+                    interface=self._cfg.interface,
                 )
             entry = scan[0]
             attrs = dict(entry.get("attrs", []))
@@ -248,14 +255,16 @@ class WifiMonitor:
             ssid = None
             if isinstance(ies, dict):
                 ssid = ies.get("SSID")
+            bitrate_mbps = _nl80211_bitrate_mbps(nl, ifidx)
             return WifiSnapshot(
                 ts_ms=ts_ms,
                 ssid=ssid,
                 bssid=bss.get("NL80211_BSS_BSSID"),
                 rssi=_dbm_from_mbm(bss.get("NL80211_BSS_SIGNAL_MBM")),
                 channel=_freq_to_channel(bss.get("NL80211_BSS_FREQUENCY")),
-                link_rate_kbps=None,
+                link_rate_kbps=int(bitrate_mbps * 1000) if bitrate_mbps else None,
                 associated=True,
+                interface=self._cfg.interface,
             )
         finally:
             with contextlib.suppress(Exception):
@@ -281,6 +290,7 @@ class WifiMonitor:
                 channel=None,
                 link_rate_kbps=None,
                 associated=False,
+                interface=self._cfg.interface,
             )
         ssid = _match1(_IW_LINK_RE["ssid"], text)
         bssid = _match1(_IW_LINK_RE["bssid"], text)
@@ -295,6 +305,7 @@ class WifiMonitor:
             channel=_freq_to_channel(freq) if freq is not None else None,
             link_rate_kbps=int(rx_mbit * 1000) if rx_mbit is not None else None,
             associated=True,
+            interface=self._cfg.interface,
         )
 
     async def _iw_event_loop(self) -> None:
@@ -351,6 +362,22 @@ def _dbm_from_mbm(mbm: object) -> int | None:
         return None
 
 
+def _nl80211_bitrate_mbps(nl, ifidx) -> float | None:  # pragma: no cover - hw-dependent
+    """Best-effort negotiated TX bitrate (MBit/s) from station info; None if N/A."""
+    try:
+        stations = nl.get_stations(ifidx) or []
+    except Exception:  # noqa: BLE001
+        return None
+    for st in stations:
+        attrs = dict(st.get("attrs", []))
+        sinfo = dict(attrs.get("NL80211_ATTR_STA_INFO", {}).get("attrs", []))
+        rate = dict(sinfo.get("NL80211_STA_INFO_TX_BITRATE", {}).get("attrs", []))
+        bitrate = rate.get("NL80211_RATE_INFO_BITRATE32") or rate.get("NL80211_RATE_INFO_BITRATE")
+        if bitrate:
+            return float(bitrate) / 10.0  # nl80211 reports in 100 kbit/s units
+    return None
+
+
 def _freq_to_channel(freq_mhz: object) -> int | None:
     if freq_mhz is None:
         return None
@@ -370,4 +397,8 @@ def _freq_to_channel(freq_mhz: object) -> int | None:
 
 
 async def run_wifi_monitor(conn, bus) -> None:
-    await WifiMonitor(conn, bus).run()
+    from pingwatch.config import get_settings
+
+    settings = get_settings()
+    cfg = WifiConfig(interface=settings.wifi.interface)
+    await WifiMonitor(conn, bus, cfg).run()

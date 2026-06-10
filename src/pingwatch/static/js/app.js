@@ -55,11 +55,13 @@ function pingwatch() {
       pingStatuses: [],
       pingSearch: '',
       wifi_overview: null,
+      wifiMetric: 'rssi',
     },
     settings: {},
     targets: [],
     newTarget: { name: '', address: '', type: 'ICMP', kind: 'external', interval_ms: 1000, timeout_ms: 2000, enabled: true, ordering: 0 },
     system: {},
+    update: { current_sha: null, remote_sha: null, behind: null, branch: null, ts_ms: null, checking: false },
     exportRange: '24h',
     streamRange: '1h',
     streamSeries: [],
@@ -173,7 +175,7 @@ function pingwatch() {
       // to the dashboard, not back into the last-open settings sub-screen.
       this.currentScreen = 'settings';
       this.settings_sub = name;
-      if (name === 'system') this.loadSystem();
+      if (name === 'system') { this.loadSystem(); this.loadUpdateStatus(); }
       if (name === 'wlan') this.loadWifiStatus();
     },
 
@@ -181,6 +183,11 @@ function pingwatch() {
       this.detail.range = r;
       if (this.detail.key === 'wifi') { this.loadWifiOverview(); return; }
       this.loadOverview();
+    },
+
+    setWifiMetric(m) {
+      this.detail.wifiMetric = m;
+      this.$nextTick(() => this._renderRssiChart());
     },
 
     // ---------- dashboard ----------
@@ -339,7 +346,13 @@ function pingwatch() {
       this._rssiChart = null;
       const init = () => {
         const fn = (window.PingWatchCharts.rssiChart || window.PingWatchCharts.latencyChart);
-        this._rssiChart = fn(cv, this.detail.wifi_overview.series || []);
+        const ov = this.detail.wifi_overview;
+        if (this.detail.wifiMetric === 'link') {
+          const pts = (ov.link_series || []).map((p) => ({ ts_ms: p.ts_ms, rssi: Math.round(p.link_rate_kbps / 100) / 10 }));
+          this._rssiChart = fn(cv, pts, { label: 'Link-Speed', color: '#34d399', bg: 'rgba(52,211,153,0.10)', unit: 'MBit/s', yMin: 0, yMax: null });
+        } else {
+          this._rssiChart = fn(cv, ov.series || []);
+        }
       };
       if (cv.clientWidth === 0 || cv.clientHeight === 0) {
         requestAnimationFrame(() => requestAnimationFrame(init));
@@ -535,6 +548,32 @@ function pingwatch() {
         const r = await fetch('/api/system');
         if (r.ok) this.system = await r.json();
       } catch (e) { /* */ }
+    },
+
+    async loadUpdateStatus() {
+      try {
+        const r = await fetch('/api/system/update-status');
+        if (r.ok) this.update = { ...this.update, ...(await r.json()), checking: false };
+      } catch (e) { /* */ }
+    },
+    async checkUpdate() {
+      this.update.checking = true;
+      this.showToast('Suche nach Updates…');
+      try {
+        await fetch('/api/system/check-update', { method: 'POST' });
+        // host-helper does a git fetch (~1-3 s); poll the status briefly.
+        await new Promise((res) => setTimeout(res, 3000));
+        await this.loadUpdateStatus();
+        if (this.update.behind > 0) this.showToast('Update verfügbar (' + this.update.behind + ')');
+        else if (this.update.behind === 0) this.showToast('Bereits aktuell');
+        else this.showToast('Status nicht verfügbar');
+      } catch (e) { this.showToast('Prüfung fehlgeschlagen'); }
+      this.update.checking = false;
+    },
+    async installUpdate() {
+      if (!confirm('Update installieren? Der Pi baut & startet die Dienste neu (~1–2 Min).')) return;
+      await fetch('/api/system/update', { method: 'POST' });
+      this.showToast('Update läuft — Pi baut & startet neu, Seite verbindet automatisch.');
     },
 
     async downloadDiagnose() { window.location = '/api/system/diagnose-bundle'; },

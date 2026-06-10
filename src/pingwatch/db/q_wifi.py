@@ -92,3 +92,39 @@ async def rssi_series(
     rows = await cur.fetchall()
     await cur.close()
     return [(r["ts_ms"], r["rssi"]) for r in rows]
+
+
+async def insert_source_switch(
+    conn: aiosqlite.Connection, ts_ms: int, from_if: str | None, to_if: str
+) -> None:
+    await conn.execute(
+        "INSERT INTO wifi_source_switches(ts_ms, from_if, to_if) VALUES (?, ?, ?)",
+        (ts_ms, from_if, to_if),
+    )
+    await conn.commit()
+
+
+async def source_switches(
+    conn: aiosqlite.Connection, since_ms: int
+) -> list[dict[str, Any]]:
+    cur = await conn.execute(
+        "SELECT ts_ms, from_if, to_if FROM wifi_source_switches "
+        "WHERE ts_ms >= ? ORDER BY ts_ms ASC",
+        (since_ms,),
+    )
+    rows = await cur.fetchall()
+    await cur.close()
+    return [dict(r) for r in rows]
+
+
+async def link_rate_series(
+    conn: aiosqlite.Connection, since_ms: int
+) -> list[tuple[int, int]]:
+    cur = await conn.execute(
+        "SELECT ts_ms, link_rate_kbps FROM wifi_rssi_samples "
+        "WHERE ts_ms >= ? AND link_rate_kbps IS NOT NULL ORDER BY ts_ms ASC",
+        (since_ms,),
+    )
+    rows = await cur.fetchall()
+    await cur.close()
+    return [(r["ts_ms"], r["link_rate_kbps"]) for r in rows]

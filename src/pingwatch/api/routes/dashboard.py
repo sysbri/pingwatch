@@ -28,6 +28,13 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     cards: list[dict[str, Any]] = []
     for dest in destinations:
         kpi = await q.dest_kpis(conn, dest["id"], since_ms=day_start_ms)
+        # Scale the recency window for slow-interval targets so they can still
+        # accumulate enough attempts to be classified down.
+        recent_window_ms = max(
+            _RECENT_WINDOW_MS,
+            (dest.get("interval_ms") or 1000) * _RECENT_MIN_ATTEMPTS * 2,
+        )
+        recent = await q.dest_kpis(conn, dest["id"], since_ms=now_ms - recent_window_ms)
         spark = await q.latency_sparkline(conn, dest["id"], points=60)
         outs = await q.outages_today_for_dest(
             conn, dest["id"], since_ms=day_start_ms
@@ -43,7 +50,7 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
                 "kpi": kpi,
                 "sparkline": spark,
                 "outages_today": outs,
-                "status": _classify(kpi),
+                "status": _classify(kpi, recent),
             }
         )
 
@@ -223,7 +230,17 @@ async def build_dashboard_payload(conn: Any) -> dict[str, Any]:
     }
 
 
-def _classify(kpi: dict[str, Any]) -> str:
+# A target whose last ~2 min are a total loss is *down* right now — the 24h
+# aggregate must not mask that (e.g. gateway IP gone stale after a network
+# change). Require a minimum number of attempts so a probe that just started
+# (or a single hiccup) cannot flip a healthy target to down.
+_RECENT_WINDOW_MS = 120_000
+_RECENT_MIN_ATTEMPTS = 5
+
+
+def _classify(kpi: dict[str, Any], recent: dict[str, Any]) -> str:
+    if recent["total"] >= _RECENT_MIN_ATTEMPTS and recent["ok"] == 0:
+        return "down"
     if kpi["loss_pct"] > 1.0:
         return "flaky"
     return "ok"

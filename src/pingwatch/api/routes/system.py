@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -21,6 +22,10 @@ from pingwatch.db import queries as q
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
+
+# Written by the host-helper `check_update` command (git fetch + behind-count).
+_SHARED_DIR = Path("/run/pingwatch-shared")
+_UPDATE_STATUS_FILE = _SHARED_DIR / "update-status.json"
 
 
 def _read_cpu_pct() -> float:
@@ -179,6 +184,38 @@ async def factory_reset(
 async def clear_data(conn: ConnDep) -> OkResponse:
     await q.purge_all_metrics(conn)
     return OkResponse(ok=True, detail="metrics purged")
+
+
+@router.post("/check-update", response_model=OkResponse)
+async def check_update() -> OkResponse:
+    # Tell the host-helper to `git fetch` and refresh update-status.json.
+    ok = await _write_host_command("check_update")
+    return OkResponse(ok=ok, detail="check triggered" if ok else "fifo unavailable")
+
+
+@router.get("/update-status")
+async def get_update_status() -> dict[str, Any]:
+    """Last known update status written by the host-helper `check_update`.
+
+    ``behind`` is the number of commits the local checkout is behind
+    ``origin/main`` (0 = up to date, ``None`` = never checked / unavailable).
+    """
+    try:
+        if _UPDATE_STATUS_FILE.exists():
+            data = json.loads(_UPDATE_STATUS_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, ValueError):
+        pass
+    return {"behind": None, "current_sha": None, "remote_sha": None, "ts_ms": None}
+
+
+@router.post("/update", response_model=OkResponse)
+async def install_update() -> OkResponse:
+    # Host-helper pulls origin/main, re-runs the installer (host-helper + udev
+    # + image build) and restarts the services.
+    ok = await _write_host_command("update_check")
+    return OkResponse(ok=ok, detail="update started" if ok else "fifo unavailable")
 
 
 @router.get("/info")

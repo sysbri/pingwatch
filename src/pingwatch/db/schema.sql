@@ -170,6 +170,15 @@ CREATE TABLE IF NOT EXISTS wifi_rssi_samples (
   noise_dbm      INTEGER
 ) WITHOUT ROWID;
 
+-- Antennen-/Quellen-Wechsel (interne vs. USB-WLAN). Additiv: wird auf
+-- Bestands-DBs per CREATE TABLE IF NOT EXISTS automatisch angelegt.
+CREATE TABLE IF NOT EXISTS wifi_source_switches (
+  ts_ms   INTEGER NOT NULL,
+  from_if TEXT,
+  to_if   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_wifi_src_sw_time ON wifi_source_switches(ts_ms DESC);
+
 -- ===== Stream =====
 CREATE TABLE IF NOT EXISTS stream_events (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

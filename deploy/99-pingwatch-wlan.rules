@@ -1,0 +1,5 @@
+# Wird ein USB-WLAN-Interface hinzugefügt, bittet PingWatch den Host-Helper,
+# es als aktive Verbindung zu bevorzugen (route-tragend). Beim Abziehen
+# übernimmt NetworkManager das Failback auf onboard automatisch (Route-Metric).
+ACTION=="add", SUBSYSTEM=="net", SUBSYSTEMS=="usb", ENV{DEVTYPE}=="wlan", \
+  RUN+="/usr/local/bin/pingwatch-wlan-prefer %k"
