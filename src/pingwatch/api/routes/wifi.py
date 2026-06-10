@@ -157,6 +157,16 @@ async def open_portal() -> OkResponse:
     return OkResponse(ok=True, detail="portal opening on kiosk")
 
 
+@router.post("/close-portal", response_model=OkResponse)
+async def close_portal() -> OkResponse:
+    """Close the temporary captive-portal browser window on the kiosk."""
+    try:
+        await host_fifo.write_command("close_portal")
+    except (FileNotFoundError, PermissionError, TimeoutError, OSError):
+        return OkResponse(ok=False, detail="host helper unavailable")
+    return OkResponse(ok=True, detail="portal closing")
+
+
 @router.post("/forget")
 async def forget(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008  # FastAPI dependency injection
     ssid = str(payload.get("ssid") or "").strip()

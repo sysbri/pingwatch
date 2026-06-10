@@ -29,8 +29,9 @@
 <!-- Captive Portal -->
 <div class="exp-card" style="margin-top:10px">
   <div class="ti">Captive Portal</div>
-  <div class="ds">Freies WLAN mit Anmeldeseite? Oeffnet die Portal-Seite direkt auf diesem Bildschirm &mdash; mit der Maus durchklicken, das Fenster schliesst nach 3 Minuten von selbst (oder Strg+W).</div>
+  <div class="ds">Freies WLAN mit Anmeldeseite? Oeffnet die Portal-Seite direkt auf diesem Bildschirm &mdash; mit der Maus durchklicken. Schliesst nach 3 Minuten von selbst oder sofort ueber den Schliessen-Knopf.</div>
   <button class="btn" @click="openPortal()">Portal-Seite oeffnen</button>
+  <button class="btn" @click="closePortal()">Portal-Seite schliessen</button>
 </div>
 
 <!-- Error-Banner -->

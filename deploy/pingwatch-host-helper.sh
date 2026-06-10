@@ -262,15 +262,26 @@ PY
           wld=$(ls "/run/user/${pw_uid}/" 2>/dev/null | grep -E '^wayland-[0-9]+$' | head -1)
           wld="${wld:-wayland-0}"
           log "open_portal url=$url display=$wld"
-          # Nur eine Portal-Instanz zulassen (Pattern matcht NUR das
-          # portal-eigene user-data-dir, nicht den Kiosk-Chromium).
+          # Eigene transiente Unit: RuntimeMaxSec uebernimmt das Auto-Close
+          # (robust gegen Helper-Restarts, kein sleep-Timer noetig) und
+          # close_portal kann die Unit gezielt stoppen. Alte Instanz vorher weg.
+          systemctl stop pingwatch-portal.service 2>/dev/null || true
           pkill -u pingwatch -f "pingwatch-portal-chromium" 2>/dev/null || true
-          sudo -u pingwatch env XDG_RUNTIME_DIR="/run/user/${pw_uid}" WAYLAND_DISPLAY="$wld" \
+          systemd-run --quiet --collect --unit pingwatch-portal \
+            --uid=pingwatch \
+            --setenv=XDG_RUNTIME_DIR="/run/user/${pw_uid}" \
+            --setenv=WAYLAND_DISPLAY="$wld" \
+            --property=RuntimeMaxSec=180 \
             chromium --ozone-platform=wayland \
             --user-data-dir="/home/pingwatch/.cache/pingwatch-portal-chromium" \
-            --app="$url" >/dev/null 2>&1 &
-          ( sleep 180; pkill -u pingwatch -f "pingwatch-portal-chromium" 2>/dev/null ) &
+            --app="$url" 2>&1 | logger -t pingwatch-host-helper || true
         fi
+        ;;
+      close_portal)
+        log "close_portal"
+        systemctl stop pingwatch-portal.service 2>/dev/null || true
+        # Fallback fuer Instanzen, die noch vom alten sleep-Timer-Weg stammen.
+        pkill -u pingwatch -f "pingwatch-portal-chromium" 2>/dev/null || true
         ;;
       wifi_prefer_stick)
         # payload = USB-WLAN-Interface-Name. Verbindet die aktuell genutzte SSID
