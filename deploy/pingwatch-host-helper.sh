@@ -284,23 +284,26 @@ PY
         pkill -u pingwatch -f "pingwatch-portal-chromium" 2>/dev/null || true
         ;;
       wifi_prefer_stick)
-        # payload = USB-WLAN-Interface-Name. Verbindet die aktuell genutzte SSID
-        # auf dem Stick, bindet das Profil ans Interface und gibt ihm die
-        # niedrigere Route-Metric, damit der Stick die Default-Route gewinnt.
+        # payload = USB-WLAN-Interface-Name. Eigenes, fest ans Stick-Interface
+        # gepinntes Profil "pingwatch-stick" mit niedrigerer Route-Metric —
+        # der Stick gewinnt die Default-Route, wenn er verbindet. Das
+        # Onboard-Profil wird NIE angefasst: `nmcli dev wifi connect` wuerde
+        # das bestehende SSID-Profil auf den Stick UMZIEHEN, und wenn der
+        # Stick dann versagt (z.B. Unterspannung), ist die Verbindung komplett
+        # weg — eigenes Profil = onboard bleibt als Fallback verbunden.
+        # Hinweis: nur fuer offene Netze (kein PSK im Profil).
         iface="$payload"
         ssid="$(nmcli -t -f IN-USE,SSID dev wifi 2>/dev/null | awk -F: '$1=="*"{print $2; exit}')"
         [ -z "$ssid" ] && ssid="${PINGWATCH_EXPECTED_SSID:-}"
         log "wifi_prefer_stick iface=$iface ssid=${ssid:-<none>}"
         if [ -n "$iface" ] && [ -n "$ssid" ]; then
-          nmcli dev wifi connect "$ssid" ifname "$iface" 2>&1 | logger -t pingwatch-host-helper || true
-          con="$(nmcli -t -f NAME,DEVICE c show --active 2>/dev/null | awk -F: -v d="$iface" '$2==d{print $1; exit}')"
-          if [ -n "$con" ]; then
-            nmcli c modify "$con" \
-              ipv4.route-metric 50 ipv6.route-metric 50 \
-              connection.autoconnect yes connection.autoconnect-retries 0 \
-              2>&1 | logger -t pingwatch-host-helper || true
-            nmcli c up "$con" ifname "$iface" 2>&1 | logger -t pingwatch-host-helper || true
-          fi
+          nmcli c delete "pingwatch-stick" 2>/dev/null || true
+          nmcli c add type wifi ifname "$iface" con-name "pingwatch-stick" \
+            ssid "$ssid" \
+            ipv4.route-metric 50 ipv6.route-metric 50 \
+            connection.autoconnect yes connection.autoconnect-retries 0 \
+            2>&1 | logger -t pingwatch-host-helper || true
+          nmcli c up "pingwatch-stick" 2>&1 | logger -t pingwatch-host-helper || true
         fi
         ;;
       *)
