@@ -43,17 +43,21 @@ write_wifi_status() {
   # security string comes from a single `iw link` call. Written to a unique
   # temp file and atomically renamed so readers never see a partial JSON.
   local security="${1:-}"
-  local wlan_if label link tmp
+  local wlan_if label link gw tmp
   wlan_if=$(resolve_wlan_if)
   label=$(iface_label "$wlan_if")
   link=$(iw dev "$wlan_if" link 2>/dev/null || true)
+  # Default-Route-Gateway (niedrigste Metric zuerst) — der Container haelt
+  # damit das Gateway-Ziel aktuell (gateway_sync).
+  gw=$(ip route show default 2>/dev/null | awk '/^default/ {print $3; exit}')
   tmp=$(mktemp "${SHARED_DIR}/.wifi-status.XXXXXX" 2>/dev/null) || return 0
-  python3 - "$link" "$security" "$wlan_if" "$label" > "$tmp" <<'PY'
+  python3 - "$link" "$security" "$wlan_if" "$label" "$gw" > "$tmp" <<'PY'
 import json, time, sys, re
 link = sys.argv[1] if len(sys.argv) > 1 else ''
 security = sys.argv[2] if len(sys.argv) > 2 else ''
 iface = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
 label = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+gateway = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
 connected = 'Connected to' in link
 
 def find(rx, cast=str):
@@ -90,6 +94,7 @@ print(json.dumps({
   'security': security or None,
   'interface': iface,
   'interface_label': label,
+  'gateway_ip': gateway,
 }))
 PY
   chmod 644 "$tmp" 2>/dev/null || true

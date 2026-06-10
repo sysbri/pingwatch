@@ -188,6 +188,11 @@ async def serve() -> None:
                 tg, workers, "wifi_monitor",
                 "pingwatch.wifi.monitor", "run_wifi_monitor", conn, bus,
             )
+            # Gateway destination follows the real default route.
+            await _spawn_worker(
+                tg, workers, "gateway_sync",
+                "pingwatch.gateway_sync", "run_gateway_sync", conn, bus,
+            )
             # Traceroute scheduler.
             await _spawn_worker(
                 tg, workers, "trace_scheduler",

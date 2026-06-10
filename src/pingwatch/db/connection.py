@@ -58,6 +58,7 @@ DEFAULT_SETTINGS: tuple[tuple[str, str, str], ...] = (
     ("retention.notifications_days", "30", "int"),
     ("wifi.interface", "wlan0", "string"),
     ("wifi.expected_ssid", "", "string"),
+    ("gateway.auto_update", "true", "bool"),
     ("wifi.rssi_warning_dbm", "-75", "int"),
     ("wifi.reassoc_counts_as_outage", "true", "bool"),
     ("ui.timezone", "Europe/Berlin", "string"),
