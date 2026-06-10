@@ -227,11 +227,15 @@ PY
         # payload format: "SSID\tPASSWORD" (password may be empty for open WLAN)
         ssid=$(printf '%s' "$payload" | awk -F'\t' '{print $1}')
         pw=$(printf '%s' "$payload" | awk -F'\t' '{print $2}')
-        log "wifi_connect ssid=$ssid pw=[REDACTED-${#pw}chars]"
+        log "wifi_connect ssid=$ssid pw=[REDACTED-${#pw}chars] ifname=$WLAN_IF"
+        # Manuelle Connects IMMER aufs Onboard-Interface pinnen: mit einem
+        # zweiten WLAN-Adapter (Stick) wuerde NetworkManager sich sonst ein
+        # Geraet aussuchen — landet der Connect auf einem zickenden Stick,
+        # schlaegt er fehl. Den Stick managt wifi_prefer_stick separat.
         if [ -z "$pw" ]; then
-          out=$(nmcli dev wifi connect "$ssid" 2>&1)
+          out=$(nmcli dev wifi connect "$ssid" ifname "$WLAN_IF" 2>&1)
         else
-          out=$(nmcli dev wifi connect "$ssid" password "$pw" 2>&1)
+          out=$(nmcli dev wifi connect "$ssid" password "$pw" ifname "$WLAN_IF" 2>&1)
         fi
         rc=$?
         python3 - "$ssid" "$rc" "$out" <<'PY' > /run/pingwatch-shared/wifi-result.json
