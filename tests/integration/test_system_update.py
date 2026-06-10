@@ -31,6 +31,23 @@ async def test_update_status_missing_file(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_result_reads_file(tmp_path: Path, monkeypatch) -> None:
+    f = tmp_path / "update-result.json"
+    f.write_text(json.dumps({"ts_ms": 5, "phase": "install", "detail": "Installer laeuft"}))
+    monkeypatch.setattr(sysroutes, "_UPDATE_RESULT_FILE", f)
+    data = await sysroutes.get_update_result()
+    assert data["phase"] == "install"
+    assert data["detail"] == "Installer laeuft"
+
+
+@pytest.mark.asyncio
+async def test_update_result_missing_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(sysroutes, "_UPDATE_RESULT_FILE", tmp_path / "nope.json")
+    data = await sysroutes.get_update_result()
+    assert data["phase"] is None
+
+
+@pytest.mark.asyncio
 async def test_install_update_writes_update_check(monkeypatch) -> None:
     calls: list[str] = []
 

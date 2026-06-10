@@ -166,6 +166,10 @@ if [ -f "${DEPLOY_DIR}/pingwatch-host-helper.service" ]; then
   systemctl daemon-reload
   systemctl enable --now pingwatch-host-helper.service
 fi
+# Detached update runner (UI 'Update installieren' -> systemd-run unit).
+if [ -f "${DEPLOY_DIR}/pingwatch-update" ]; then
+  install -m 0755 "${DEPLOY_DIR}/pingwatch-update" /usr/local/bin/pingwatch-update
+fi
 
 # ---- 9b. Shared dir for host-helper result JSON files (wifi-*.json) ----
 install -d -m 0755 /run/pingwatch-shared
