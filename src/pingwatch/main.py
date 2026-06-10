@@ -193,6 +193,11 @@ async def serve() -> None:
                 tg, workers, "gateway_sync",
                 "pingwatch.gateway_sync", "run_gateway_sync", conn, bus,
             )
+            # Captive-portal aware connectivity probe (HTTP 204).
+            await _spawn_worker(
+                tg, workers, "connectivity",
+                "pingwatch.connectivity", "run_connectivity", conn, bus,
+            )
             # Traceroute scheduler.
             await _spawn_worker(
                 tg, workers, "trace_scheduler",
