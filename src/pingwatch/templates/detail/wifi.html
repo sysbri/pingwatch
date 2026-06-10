@@ -12,7 +12,7 @@
 <div class="det-main">
   <div class="chart-panel">
     <div class="chart-head">
-      <div class="pt" x-text="detail.wifiMetric === 'link' ? 'Link-Speed' : 'RSSI'"></div>
+      <div class="pt" x-text="(detail.wifiMetric === 'link' ? 'Link-Speed' : 'RSSI') + ' · ' + detail.range"></div>
       <div class="range">
         <button type="button" :class="{ active: detail.wifiMetric === 'rssi' }" @click.prevent="setWifiMetric('rssi')">RSSI</button>
         <button type="button" :class="{ active: detail.wifiMetric === 'link' }" @click.prevent="setWifiMetric('link')">Link-Speed</button>
