@@ -128,17 +128,17 @@
     </div>
   </template>
   <template x-for="card in (dashboard.cards || [])" :key="card.id">
-    <div class="pw-card" :class="{ flaky: card.status === 'flaky' }" @click="goto('detail', cardKey(card))">
+    <div class="pw-card" :class="{ flaky: card.status === 'flaky', down: card.status === 'down' }" @click="goto('detail', cardKey(card))">
       <div class="ch">
         <div>
           <div class="nm" x-text="card.name"></div>
           <div class="ad" x-text="card.address"></div>
         </div>
-        <span class="badge" :class="card.status === 'flaky' ? 'warn' : 'ok'" x-text="card.status === 'flaky' ? 'FLAKY' : 'OK'"></span>
+        <span class="badge" :class="card.status === 'ok' ? 'ok' : (card.status === 'down' ? 'down' : 'warn')" x-text="card.status === 'down' ? 'WEG' : (card.status === 'flaky' ? 'FLAKY' : 'OK')"></span>
       </div>
       <div class="metrics-big">
         <div class="m">
-          <div class="v" :class="card.status === 'flaky' ? 'amber' : 'green'">
+          <div class="v" :class="card.status === 'ok' ? 'green' : (card.status === 'down' ? 'red' : 'amber')">
             <span x-text="formatLatency(card.kpi && card.kpi.mean_us)"></span><small> ms</small>
           </div>
           <div class="l">Latenz Ø</div>
