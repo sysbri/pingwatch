@@ -42,6 +42,13 @@ async def test_open_portal_falls_back_without_detected_url(monkeypatch, fifo_cal
 
 
 @pytest.mark.asyncio
+async def test_close_portal_writes_close_command(fifo_calls) -> None:
+    res = await wifi_routes.close_portal()
+    assert res.ok is True
+    assert fifo_calls == ["close_portal"]
+
+
+@pytest.mark.asyncio
 async def test_open_portal_reports_fifo_unavailable(monkeypatch) -> None:
     async def fake_write(line: str) -> None:
         raise FileNotFoundError
